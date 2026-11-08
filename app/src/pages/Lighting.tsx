@@ -29,13 +29,16 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
 
   const effect = draft ? effectByMode(draft.mode) : undefined;
 
-  /** Live apply, coalesced so a slider drag sends one frame per pause. */
-  const apply = (p: LedParam) => {
+  /** Lighting lands in the keyboard's flash, so writes are spaced (the
+   *  backend keeps at least a second between them). Clicks write at once;
+   *  sliders write when released; the colour picker once it settles. */
+  const apply = (p: LedParam, when: "now" | "settle" | "preview" = "now") => {
     setDraft(p);
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      setLed(p).catch((e) => toast.error(`写入失败：${e}`));
-    }, 180);
+    if (when === "preview") return;
+    const go = () => setLed(p).catch((e) => toast.error(`写入失败：${e}`));
+    if (when === "now") go();
+    else timer.current = setTimeout(go, 600);
   };
 
   const lightFn = useMemo(() => {
@@ -101,7 +104,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
             <div className="text-xs text-muted-foreground">当前灯效</div>
             <div className="mt-1 flex items-center gap-2">
               <span className="text-lg font-semibold">{effect?.name ?? `模式 ${draft.mode}`}</span>
-              <Tag tone="ok">已同步</Tag>
+              <Tag tone={led && JSON.stringify(led) === JSON.stringify(draft) ? "ok" : "muted"}>{led && JSON.stringify(led) === JSON.stringify(draft) ? "已写入键盘" : "未写入"}</Tag>
             </div>
           </div>
           <Section title="参数">
@@ -111,7 +114,8 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
               value={draft.brightness}
               min={0}
               max={BRIGHTNESS_MAX}
-              onChange={(v) => apply({ ...draft, brightness: v })}
+              onChange={(v) => apply({ ...draft, brightness: v }, "preview")}
+              onCommit={(v) => apply({ ...draft, brightness: v })}
               format={(v) => (v === 0 ? "关闭" : `${v} / ${BRIGHTNESS_MAX}`)}
             />
             {effect?.speed && (
@@ -121,7 +125,8 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
                 value={draft.speed}
                 min={0}
                 max={SPEED_MAX}
-                onChange={(v) => apply({ ...draft, speed: v })}
+                onChange={(v) => apply({ ...draft, speed: v }, "preview")}
+                onCommit={(v) => apply({ ...draft, speed: v })}
                 format={(v) => ["最慢", "慢", "中", "快", "最快"][v]}
               />
             )}
@@ -154,7 +159,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
                   <ColorSwatches
                     id="led-color"
                     value={[draft.r, draft.g, draft.b]}
-                    onChange={([r, g, b]) => apply({ ...draft, r, g, b })}
+                    onChange={([r, g, b]) => apply({ ...draft, r, g, b }, "settle")}
                   />
                 )}
               </>
@@ -164,7 +169,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
           </Section>
           <Section title="说明">
             <p className="text-xs leading-relaxed text-muted-foreground">
-              修改立即生效。左侧预览是示意，实际效果以键盘为准。Fn 键的灯用来显示充电和配对状态，不跟随灯效。
+              点选立即写入键盘，滑块松手后写入。左侧预览是示意，实际效果以键盘为准。Fn 键的灯用来显示充电和配对状态，不跟随灯效。
             </p>
           </Section>
         </>

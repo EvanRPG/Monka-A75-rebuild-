@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, type DeviceSettings, type ReportRate } from "@/lib/backend";
-import { useApp, type Skin, type ThemeChoice } from "@/lib/store";
+import { useApp, type ThemeChoice } from "@/lib/store";
 import { toast } from "sonner";
 import { BatteryCharging, Cable, Cpu, Radio, RotateCcw } from "lucide-react";
 
@@ -60,7 +60,7 @@ function SleepSelect({ id, value, onChange }: { id: string; value: number; onCha
 }
 
 export default function Device() {
-  const { device, theme, setTheme, skin, setSkin } = useApp();
+  const { device, theme, setTheme } = useApp();
   const [s, setS] = useState<DeviceSettings | null>(null);
   const [rate, setRate] = useState<ReportRate | null>(null);
   const [readBack, setReadBack] = useState<ReportRate | null>(null);
@@ -69,10 +69,13 @@ export default function Device() {
 
   useEffect(() => {
     api.getSettings().then(setS).catch((e) => toast.error(`读取设置失败：${e}`));
-    api.getReportRate().then((r) => {
-      setRate(r);
-      setReadBack(r);
-    });
+    api
+      .getReportRate()
+      .then((r) => {
+        setRate(r);
+        setReadBack(r);
+      })
+      .catch(() => setReadBack(null));
   }, []);
 
   const changeRate = async (r: ReportRate) => {
@@ -121,10 +124,10 @@ export default function Device() {
           {wired && <Callout>电量只能在 2.4G 下读到：键盘本身不报电量，是接收器转报的。插线时看 Fn 键的灯：蓝色常亮表示正在充电，绿色表示已充满。</Callout>}
         </Card>
 
-        <Card title="回报率" aside={<Tag tone="warn">待验证</Tag>}>
+        <Card title="回报率" aside={<Tag tone={readBack ? "warn" : "muted"}>{readBack ? "待验证" : "不可用"}</Tag>}>
           <Segmented
             id="report-rate"
-            className="w-full"
+            className={readBack ? "w-full" : "pointer-events-none w-full opacity-50"}
             value={rate ?? 1000}
             options={[125, 250, 500, 1000].map((r) => [r as ReportRate, `${r} Hz`] as [ReportRate, string])}
             onChange={changeRate}
@@ -134,7 +137,9 @@ export default function Device() {
             <span className="tabular font-mono">{readBack ? `${readBack} Hz` : "无应答"}</span>
           </div>
           <Callout tone="warn">
-            原版驱动里有这项设置，但还没确认 A75 的固件会照做。回读一致只说明键盘记住了数值，实际速率要用回报率测试网页再测一次。
+            {readBack
+              ? "原版驱动里有这项设置，但还没确认 A75 的固件会照做。回读一致只说明键盘记住了数值，实际速率要用回报率测试网页再测一次。"
+              : "键盘没有正常回应回报率查询。为了安全，这项设置不开放。"}
           </Callout>
         </Card>
 
@@ -145,7 +150,7 @@ export default function Device() {
                 id="debounce"
                 label="防抖时间"
                 value={s.debounce}
-                min={0}
+                min={1}
                 max={10}
                 onChange={(v) => setS({ ...s, debounce: v })}
                 onCommit={(v) => api.setDebounce(v).then(() => toast.success(`防抖已设为 ${v} ms`)).catch((e) => toast.error(`写入失败：${e}`))}
@@ -187,7 +192,7 @@ export default function Device() {
         </Card>
 
         <Card title="外观">
-          <Row label="主题" htmlFor="theme">
+          <Row label="主题" hint="浅色用白色键盘图，深色用黑色键盘图" htmlFor="theme">
             <Segmented<ThemeChoice>
               id="theme"
               size="sm"
@@ -200,18 +205,7 @@ export default function Device() {
               onChange={setTheme}
             />
           </Row>
-          <Row label="键盘图配色" hint="只改变软件里键盘图的样子" htmlFor="skin">
-            <Segmented<Skin>
-              id="skin"
-              size="sm"
-              value={skin}
-              options={[
-                ["white", "白色"],
-                ["photo", "黑金"],
-              ]}
-              onChange={setSkin}
-            />
-          </Row>
+
         </Card>
 
         <Card title="恢复出厂设置">

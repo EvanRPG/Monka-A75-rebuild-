@@ -150,6 +150,7 @@ export default function Music() {
               <Volume2 className="size-3.5 shrink-0" />
               <span className="truncate">{status.source ?? "跟随系统默认播放设备"}</span>
             </div>
+            {status.error && <p className="text-xs text-destructive">律动已停止：{status.error}</p>}
           </div>
           <Section title="样式">
             <Segmented

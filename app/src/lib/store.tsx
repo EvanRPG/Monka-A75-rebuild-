@@ -1,19 +1,20 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, type ConnectedDevice, type LedParam } from "./backend";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { api, type ConnectedDevice, type LedParam, type ScanInfo } from "./backend";
 
 export type ThemeChoice = "dark" | "light" | "system";
-export type Skin = "white" | "photo";
 
 interface AppState {
   device: ConnectedDevice | null;
   scanning: boolean;
+  /** Why there is no device, when the backend knows. */
+  scanNote: Omit<ScanInfo, "device"> | null;
   rescan: () => void;
   led: LedParam | null;
   setLed: (p: LedParam) => Promise<void>;
   theme: ThemeChoice;
   setTheme: (t: ThemeChoice) => void;
-  skin: Skin;
-  setSkin: (s: Skin) => void;
+  /** The theme actually showing, after following the system. */
+  dark: boolean;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -28,29 +29,22 @@ function readTheme(): ThemeChoice {
   return "dark";
 }
 
-function readSkin(): Skin {
-  try {
-    if (localStorage.getItem("a75.skin") === "photo") return "photo";
-  } catch {
-    /* storage unavailable */
-  }
-  return "white";
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
   const [device, setDevice] = useState<ConnectedDevice | null>(null);
   const [scanning, setScanning] = useState(true);
   const [led, setLedState] = useState<LedParam | null>(null);
   const [theme, setThemeState] = useState<ThemeChoice>(readTheme);
-  const [skin, setSkinState] = useState<Skin>(readSkin);
-  const setSkin = useCallback((v: Skin) => {
-    setSkinState(v);
-    try {
-      localStorage.setItem("a75.skin", v);
-    } catch {
-      /* storage unavailable */
-    }
+  const [systemDark, setSystemDark] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(prefers-color-scheme: dark)").matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mq) return;
+    const on = () => setSystemDark(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
   }, []);
+  const dark = theme === "dark" || (theme === "system" && systemDark);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -63,30 +57,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [theme]);
 
+  const [scanNote, setScanNote] = useState<Omit<ScanInfo, "device"> | null>(null);
+  const deviceRef = useRef<ConnectedDevice | null>(null);
+
   const rescan = useCallback(() => {
-    setScanning(true);
     api
       .scan()
-      .then(async (d) => {
+      .then(async ({ device: d, ...note }) => {
+        const was = deviceRef.current;
+        deviceRef.current = d;
         setDevice(d);
-        if (d) setLedState(await api.getLedParam());
+        setScanNote(note);
+        // A (re)connect: read the lighting the board is actually showing.
+        if (d && (!was || was.path !== d.path)) setLedState(await api.getLedParam());
       })
-      .catch(() => setDevice(null))
+      .catch(() => {
+        deviceRef.current = null;
+        setDevice(null);
+      })
       .finally(() => setScanning(false));
   }, []);
 
+  // Look for the keyboard every 3 s until it shows up, then check on it
+  // every 30 s (the backend answers from cache, so this costs the board
+  // nothing). Battery comes along with it over 2.4G.
   useEffect(() => {
     rescan();
-  }, [rescan]);
-
-  // Battery only changes slowly and only exists over 2.4G: a quiet poll.
-  useEffect(() => {
-    if (!device || device.link !== "receiver") return;
-    const t = setInterval(() => {
-      api.scan().then((d) => d && setDevice(d)).catch(() => {});
-    }, 60_000);
+    const t = setInterval(rescan, device ? 30_000 : 3_000);
     return () => clearInterval(t);
-  }, [device]);
+  }, [rescan, device === null]);
 
   const setLed = useCallback(async (p: LedParam) => {
     setLedState(p);
@@ -94,8 +93,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ device, scanning, rescan, led, setLed, theme, setTheme: setThemeState, skin, setSkin }),
-    [device, scanning, rescan, led, setLed, theme, skin, setSkin],
+    () => ({ device, scanning, scanNote, rescan, led, setLed, theme, setTheme: setThemeState, dark }),
+    [device, scanning, scanNote, rescan, led, setLed, theme, dark],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

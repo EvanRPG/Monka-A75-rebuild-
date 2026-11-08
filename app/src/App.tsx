@@ -52,7 +52,7 @@ function readHash(): PageId {
 }
 
 function Shell() {
-  const { device, scanning, theme, setTheme } = useApp();
+  const { device, scanning, scanNote, setTheme, dark } = useApp();
   const [page, setPage] = useState<PageId>(readHash);
 
   useEffect(() => {
@@ -72,7 +72,6 @@ function Shell() {
 
   const def = PAGES.find((p) => p.id === page)!;
   const groups = ["灯光", "按键", "设备"] as const;
-  const dark = theme === "dark" || (theme === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground md:flex-row">
@@ -139,9 +138,25 @@ function Shell() {
         ) : (
           <div className="grid flex-1 place-items-center p-8 text-center">
             <div className="max-w-sm">
-              <div className="text-[15px] font-semibold">{scanning ? "正在寻找键盘…" : "没有找到键盘"}</div>
+              <div className="text-[15px] font-semibold">
+                {scanning
+                  ? "正在寻找键盘…"
+                  : scanNote?.stalled
+                    ? "键盘停止响应了"
+                    : scanNote?.offline
+                      ? "键盘在休眠"
+                      : scanNote?.openFailed
+                        ? "键盘被别的软件占用"
+                        : "没有找到键盘"}
+              </div>
               <p className="mt-2 text-[13px] text-muted-foreground">
-                用数据线把 A75 接到电脑上，或插好 2.4G 接收器并按任意键唤醒键盘。先关掉原版魔咖驱动，两个软件不能同时打开。
+                {scanNote?.stalled
+                  ? "拔掉数据线，等 10 秒再插回去，这里会自动重新连接。键盘不会损坏。"
+                  : scanNote?.offline
+                    ? "接收器插着，但键盘没醒。按一下键盘上的任意键就能唤醒。"
+                    : scanNote?.openFailed
+                      ? "先完全退出原版魔咖驱动（包括右下角托盘图标），两个软件不能同时打开。"
+                      : "用数据线把 A75 接到电脑上，或插好 2.4G 接收器并按任意键唤醒键盘。先关掉原版魔咖驱动，两个软件不能同时打开。"}
               </p>
             </div>
           </div>

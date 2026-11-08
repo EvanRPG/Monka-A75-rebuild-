@@ -934,7 +934,7 @@ mod tests {
             // offered for pasting by the Linux permission panel
             (
                 "app/src/components/PermissionNotice.tsx",
-                include_str!("../../src/components/PermissionNotice.tsx"),
+                include_str!("../../src-sharkfin/components/PermissionNotice.tsx"),
             ),
             // inlined in every release's notes
             (

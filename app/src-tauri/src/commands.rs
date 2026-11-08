@@ -117,7 +117,7 @@ const LIGHT_GAP: Duration = Duration::from_millis(1000);
 
 /// Profile, debounce, sleep, auto-OS, reset: flash, same 1 s floor. Too
 /// short wedges; too long makes a slider lag.
-const SETTING_GAP: Duration = Duration::from_millis(1000);
+pub(crate) const SETTING_GAP: Duration = Duration::from_millis(1000);
 
 impl Default for AppState {
     fn default() -> Self {
@@ -494,7 +494,7 @@ fn run<T>(
     }
 }
 
-fn with_open<T>(
+pub(crate) fn with_open<T>(
     state: &tauri::State<AppState>,
     f: impl FnOnce(&Transport, Option<&'static FamilyCmds>) -> Result<T, HidError>,
 ) -> Result<T, String> {
@@ -503,7 +503,7 @@ fn with_open<T>(
 
 /// Writes only on a verified family. The other family's opcodes land on
 /// different registers; a keymap page write is not recoverable.
-fn with_writable<T>(
+pub(crate) fn with_writable<T>(
     state: &tauri::State<AppState>,
     f: impl FnOnce(&Transport, Option<&'static FamilyCmds>) -> Result<T, HidError>,
 ) -> Result<T, String> {
@@ -520,7 +520,7 @@ fn scaled_profiles(state: &tauri::State<AppState>) -> bool {
 /// How the open board reads a LEDPARAM packet (`DeviceSpec::led_wire`).
 /// The yc500 defaults with no board open; the command then fails on the
 /// missing device anyway.
-fn led_wire(state: &tauri::State<AppState>) -> crate::protocol::LedWire {
+pub(crate) fn led_wire(state: &tauri::State<AppState>) -> crate::protocol::LedWire {
     let inner = state.inner.lock();
     let mut wire = inner
         .open
@@ -879,7 +879,7 @@ fn key_gap(state: &tauri::State<AppState>) {
 /// One clock for every write. Claim the slot before sleeping so waiters
 /// cannot share a deadline and fire together. Wait is the stricter of the
 /// last write's floor and `min`.
-fn write_gap(state: &tauri::State<AppState>, min: Duration) {
+pub(crate) fn write_gap(state: &tauri::State<AppState>, min: Duration) {
     let now = Instant::now();
     let next = {
         let mut inner = state.inner.lock();
@@ -908,7 +908,7 @@ fn stamp_write(state: &tauri::State<AppState>) {
     state.inner.lock().last_write = Some((Instant::now(), KEY_GAP));
 }
 
-fn light_gap(state: &tauri::State<AppState>) {
+pub(crate) fn light_gap(state: &tauri::State<AppState>) {
     write_gap(state, LIGHT_GAP)
 }
 
@@ -1841,4 +1841,10 @@ pub fn raw_command(
         let reply = t.roundtrip(opcode, &payload, mode)?;
         Ok(reply.to_vec())
     })
+}
+
+/// Device id and link of the open board, if any. Sends nothing.
+pub(crate) fn open_board(state: &tauri::State<AppState>) -> Option<(u32, Link)> {
+    let inner = state.inner.lock();
+    inner.open.as_ref().map(|o| (o.spec.id, o.transport.link()))
 }

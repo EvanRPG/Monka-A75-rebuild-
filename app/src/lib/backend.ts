@@ -17,6 +17,16 @@ export interface ConnectedDevice {
   revision: number | null;
 }
 
+export interface ScanInfo {
+  device: ConnectedDevice | null;
+  /** Firmware stopped answering; it needs a replug. */
+  stalled: boolean;
+  /** Receiver present, keyboard asleep or off. */
+  offline: boolean;
+  /** Found but could not be opened (another program has it). */
+  openFailed: boolean;
+}
+
 export interface LedParam {
   mode: number;
   speed: number;
@@ -73,6 +83,8 @@ export interface MusicParams {
 
 export interface MusicStatus {
   running: boolean;
+  /** Why the stream stopped on its own. */
+  error?: string | null;
   /** Where the sound comes from, as the system names the output. */
   source: string | null;
   /** 32 bands, 0..6, exactly what was last sent. */
@@ -82,7 +94,7 @@ export interface MusicStatus {
 export type ReportRate = 125 | 250 | 500 | 1000;
 
 export interface Backend {
-  scan(): Promise<ConnectedDevice | null>;
+  scan(): Promise<ScanInfo>;
   getLedParam(): Promise<LedParam>;
   setLedParam(p: LedParam): Promise<void>;
   readKeymap(profile: number): Promise<number[]>;
@@ -116,16 +128,25 @@ const tauriBackend: Backend = {
         battery: number | null;
         revision: number | null;
       } | null;
+      stalled: boolean;
+      keyboardOffline: boolean;
+      openFailed: boolean;
     }>("scan");
     const c = r.connected;
-    if (!c) return null;
     return {
-      path: c.path,
-      deviceId: c.deviceId,
-      name: c.spec.displayName ?? c.spec.name,
-      link: c.link,
-      battery: c.battery,
-      revision: c.revision,
+      device: c
+        ? {
+            path: c.path,
+            deviceId: c.deviceId,
+            name: c.spec.displayName ?? c.spec.name,
+            link: c.link,
+            battery: c.battery,
+            revision: c.revision,
+          }
+        : null,
+      stalled: r.stalled,
+      offline: r.keyboardOffline,
+      openFailed: r.openFailed,
     };
   },
   getLedParam: () => invoke("get_led_param"),

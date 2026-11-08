@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sharkfin",
-  "version": "0.11.1",
-  "identifier": "com.getsharkfin.sharkfin",
+  "productName": "MonkaA75",
+  "version": "0.1.0",
+  "identifier": "io.github.evanrpg.monka-a75",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "sharkfin",
+        "title": "魔咖 A75 驱动",
         "width": 1280,
         "height": 820,
         "minWidth": 1080,
@@ -26,7 +26,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,12 +36,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "publisher": "dniminenn",
+    "publisher": "EvanRPG",
     "homepage": "https://github.com/dniminenn/sharkfin",
     "copyright": "Copyright (C) 2026 dniminenn",
     "license": "GPL-3.0-or-later",
     "licenseFile": "../../LICENSE",
-    "shortDescription": "Configurator for Attack Shark / ROYUAN keyboards",
+    "shortDescription": "Monka A75 keyboard driver (based on sharkfin)",
     "resources": {
       "../../LICENSE": "LICENSE",
       "../../THIRD-PARTY-NOTICES.md": "THIRD-PARTY-NOTICES.md"
@@ -72,6 +74,14 @@
           "/usr/share/metainfo/com.getsharkfin.sharkfin.metainfo.xml": "../../packaging/com.getsharkfin.sharkfin.metainfo.xml",
           "/usr/share/metainfo/com.getsharkfin.sharkfin.appdata.xml": "../../packaging/com.getsharkfin.sharkfin.metainfo.xml"
         }
+      }
+    },
+    "windows": {
+      "nsis": {
+        "languages": [
+          "SimpChinese"
+        ],
+        "displayLanguageSelector": false
       }
     }
   }

@@ -5,9 +5,11 @@
 import layoutRaw from "./a75-layout.json";
 import matrixRaw from "./a75-matrix.json";
 import fnMatrixRaw from "./a75-fnmatrix.json";
-import pictureUrl from "@/assets/a75.png";
+import darkUrl from "@/assets/a75-dark.png";
+import whiteUrl from "@/assets/a75-white.png";
 
-export const PICTURE = { url: pictureUrl, w: 871, h: 288 };
+/** Both pictures share the vendor's 871x288 frame and key coordinates. */
+export const PICTURE = { dark: darkUrl, white: whiteUrl, w: 871, h: 288 };
 
 export type Entry = [number, number, number, number];
 

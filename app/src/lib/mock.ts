@@ -28,7 +28,7 @@ const state = {
     ],
   ]),
   settings: {
-    debounce: 3,
+    debounce: 5,
     sleep: { sleepBt: 300, sleep24: 300, deepBt: 1800, deep24: 1800 },
     options: { winLock: false, wasdSwap: false, ledOff: false, sideLedOff: false, macMode: false },
     revision: "1.05",
@@ -59,7 +59,12 @@ state.base.splice(78 * 4, 4, 3, 0, 146, 1);
 export const mockBackend: Backend = {
   async scan() {
     await wait(300);
-    return { path: "demo", deviceId: 1549, name: "A75", link: "usb", battery: null, revision: 0x0105 };
+    return {
+      device: { path: "demo", deviceId: 1549, name: "A75", link: "usb", battery: null, revision: 0x0105 },
+      stalled: false,
+      offline: false,
+      openFailed: false,
+    };
   },
   async getLedParam() {
     await wait();

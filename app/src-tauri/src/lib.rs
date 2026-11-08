@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: JR Lanteigne <root@dnim.dev>
 // SPDX-FileCopyrightText: Shiroki Satsuki <me@shirok1.dev>
 // SPDX-License-Identifier: GPL-3.0-or-later
+mod a75;
 mod commands;
+mod music;
 pub mod derive;
 pub mod dev;
 pub mod hid;
@@ -35,6 +37,13 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState::default())
+        .manage(a75::MusicState::default())
+        // Never leave the board in music mode when the window goes away.
+        .on_window_event(|w, e| {
+            if let tauri::WindowEvent::CloseRequested { .. } = e {
+                let _ = a75::stop_music(w.app_handle());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::scan,
             permissions::request_input_monitoring,
@@ -80,6 +89,12 @@ pub fn run() {
             commands::export_config,
             commands::import_config,
             commands::raw_command,
+            a75::a75_get_report_rate,
+            a75::a75_set_report_rate,
+            a75::a75_music_start,
+            a75::a75_music_stop,
+            a75::a75_music_params,
+            a75::a75_music_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

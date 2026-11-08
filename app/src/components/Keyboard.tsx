@@ -1,7 +1,6 @@
 import { useEffect, useRef } from "react";
 import { KEYS, PICTURE, type KeyCap } from "@/lib/a75";
 import type { Rgb } from "@/lib/effects";
-import { drawBoard, drawCase, drawCaps, makeLayer } from "@/lib/board-render";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +22,7 @@ export interface KeyboardProps {
 const pct = (v: number, of: number) => `${(v / of) * 100}%`;
 
 export function Keyboard({ selected = [], onKey, badges, light, showKnob = true, onDragKey, className }: KeyboardProps) {
-  const { skin } = useApp();
+  const { dark } = useApp();
   const canvas = useRef<HTMLCanvasElement>(null);
   const lightRef = useRef(light);
   lightRef.current = light;
@@ -43,8 +42,6 @@ export function Keyboard({ selected = [], onKey, badges, light, showKnob = true,
     let raf = 0;
     const t0 = performance.now();
     const lit = KEYS.filter((k) => !k.knob);
-    let layers: { case: HTMLCanvasElement; caps: HTMLCanvasElement; scale: number } | null = null;
-
     const draw = (now: number) => {
       const fn = lightRef.current;
       const rect = c.getBoundingClientRect();
@@ -60,26 +57,21 @@ export function Keyboard({ selected = [], onKey, badges, light, showKnob = true,
         c.height = H;
       }
       const frame = Math.floor((now - t0) / 5);
-      if (skin === "white") {
-        const scale = W / PICTURE.w;
-        if (!layers || layers.scale !== scale) {
-          layers = { case: makeLayer(scale, drawCase), caps: makeLayer(scale, drawCaps), scale };
-        }
-        drawBoard(ctx, scale, layers, fn ? (k, i) => fn(k, i, frame) : null);
-      } else {
-        ctx.clearRect(0, 0, W, H);
-        if (fn) {
-          const sx = W / PICTURE.w;
-          const sy = H / PICTURE.h;
-          lit.forEach((k, i) => {
-            const rgb = fn(k, i, frame);
-            if (!rgb) return;
-            const [r, g, b] = rgb;
-            if (r + g + b < 6) return;
-            const x = k.x * sx;
-            const y = k.y * sy;
-            const w = k.w * sx;
-            const h = k.h * sy;
+      ctx.clearRect(0, 0, W, H);
+      if (fn) {
+        const sx = W / PICTURE.w;
+        const sy = H / PICTURE.h;
+        lit.forEach((k, i) => {
+          const rgb = fn(k, i, frame);
+          if (!rgb) return;
+          const [r, g, b] = rgb;
+          if (r + g + b < 6) return;
+          const x = k.x * sx;
+          const y = k.y * sy;
+          const w = k.w * sx;
+          const h = k.h * sy;
+          if (dark) {
+            // Black board: light glows out of a dimmed photo (screen blend).
             ctx.shadowColor = `rgba(${r},${g},${b},0.95)`;
             ctx.shadowBlur = 10 * dpr;
             ctx.fillStyle = `rgba(${r},${g},${b},0.55)`;
@@ -91,39 +83,43 @@ export function Keyboard({ selected = [], onKey, badges, light, showKnob = true,
             ctx.beginPath();
             ctx.roundRect(x + w * 0.2, y + h * 0.2, w * 0.6, h * 0.45, 2 * sx);
             ctx.fill();
-          });
-        }
+          } else {
+            // White board: light tints the translucent caps (multiply blend).
+            const soft = (v: number) => Math.round(255 - (255 - v) * 0.75);
+            ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
+            ctx.shadowBlur = 7 * dpr;
+            ctx.fillStyle = `rgb(${soft(r)},${soft(g)},${soft(b)})`;
+            ctx.beginPath();
+            ctx.roundRect(x - 2 * sx, y - 2 * sy, w + 4 * sx, h + 6 * sy, 4 * sx);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          }
+        });
       }
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
-  }, [skin]);
-
-  const photo = skin === "photo";
+  }, [dark]);
 
   return (
     <div
       className={cn("relative w-full select-none", className)}
       style={{ aspectRatio: `${PICTURE.w} / ${PICTURE.h}`, maxWidth: "100%" }}
     >
-      {photo && (
-        <img
-          src={PICTURE.url}
-          alt="Monka A75 键盘"
-          draggable={false}
-          className={cn(
-            "absolute inset-0 h-full w-full transition-[filter] duration-300",
-            light ? "brightness-[0.42] saturate-[0.35]" : "",
-          )}
-        />
-      )}
+      <img
+        src={dark ? PICTURE.dark : PICTURE.white}
+        alt="Monka A75 键盘"
+        draggable={false}
+        className={cn(
+          "absolute inset-0 h-full w-full transition-[filter] duration-300",
+          light && dark ? "brightness-[0.42] saturate-[0.35]" : "",
+        )}
+      />
       <canvas
         ref={canvas}
-        role={photo ? undefined : "img"}
-        aria-label={photo ? undefined : "Monka A75 键盘（白色）"}
         className="pointer-events-none absolute inset-0 h-full w-full"
-        style={photo ? { mixBlendMode: "screen" } : undefined}
+        style={{ mixBlendMode: dark ? "screen" : "multiply" }}
       />
       {KEYS.filter((k) => showKnob || !k.knob).map((k) => {
         const sel = selected.includes(k.slot);
