@@ -1,584 +1,251 @@
-// SPDX-FileCopyrightText: JR Lanteigne <root@dnim.dev>
-// SPDX-License-Identifier: GPL-3.0-or-later
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { PageHeader, Section } from "@/components/Page";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
+import { useEffect, useState, type ReactNode } from "react";
+import { Callout, Segmented, SliderRow, Tag } from "@/components/parts";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import {
-  exportConfig,
-  factoryReset,
-  getScreenVersion,
-  writeScreenImage,
-  getSettings,
-  importConfig,
-  setAutoOs,
-  setClock,
-  setDebounce,
-  setOptions,
-  setSleep,
-  type ConnectedDevice,
-  type DeviceSpec,
-  type DeviceSettings,
-  type KbOptions,
-  type SleepTimes,
-} from "@/lib/backend";
-import { deviceLabel } from "@/lib/brands";
-import { t } from "@/lib/i18n";
-import Waiting from "@/components/Waiting";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { api, type DeviceSettings, type ReportRate } from "@/lib/backend";
+import { useApp, type Skin, type ThemeChoice } from "@/lib/store";
+import { toast } from "sonner";
+import { BatteryCharging, Cable, Cpu, Radio, RotateCcw } from "lucide-react";
 
-const SLEEP_MIN = 60;
-const SLEEP_MAX = 3600;
-const DEEP_MIN = 600;
-
-// Drawing only where firmware is known to parse the frame. Three lineages;
-// every other gen2 board is refused here and in the backend.
-function drawRules(
-  spec: DeviceSpec,
-): { maxFrame: number; maxDim: number; mode24: boolean } | null {
-  if (spec.family === "yc500")
-    return { maxFrame: 65535, maxDim: 255, mode24: true };
-  if (spec.family !== "gen2") return null;
-  if (spec.internalName.startsWith("yc3123_"))
-    return { maxFrame: 0xffffffff, maxDim: 65535, mode24: false };
-  if (spec.internalName.startsWith("ry5088_"))
-    return { maxFrame: 65535, maxDim: 255, mode24: false };
-  return null;
-}
-
-function canDraw(spec: DeviceSpec): boolean {
-  const rules = drawRules(spec);
-  if (!rules || !spec.screen) return false;
-  const { w, h, mode } = spec.screen;
-  if (mode !== "16" && !(mode === "24" && rules.mode24)) return false;
-  if (w > rules.maxDim || h > rules.maxDim) return false;
-  return w * h * (mode === "24" ? 3 : 2) <= rules.maxFrame;
-}
-
-// No firmware evidence for the draw path, as opposed to a panel we cannot address.
-function drawsElsewhere(spec: DeviceSpec): boolean {
-  return drawRules(spec) === null;
-}
-
-function mins(seconds: number) {
-  if (seconds === 0) return t("off");
-  const m = Math.round(seconds / 60);
-  return m >= 60
-    ? t("{h} h", { h: (m / 60).toFixed(1) })
-    : t("{m} min", { m });
-}
-
-function Row({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
+function Card({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <Label className="text-sm">{label}</Label>
-        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    <section className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[14px] font-semibold">{title}</h3>
+        {aside}
       </div>
       {children}
+    </section>
+  );
+}
+
+function Row({ label, hint, children, htmlFor }: { label: string; hint?: string; children: ReactNode; htmlFor?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <label htmlFor={htmlFor} className="text-[13px]">{label}</label>
+        {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+      <div className="shrink-0">{children}</div>
     </div>
   );
 }
 
-// Debounce and sleep are flash. Drag previews; write once on release.
+const SLEEP_OPTIONS: [number, string][] = [
+  [60, "1 分钟"],
+  [180, "3 分钟"],
+  [300, "5 分钟"],
+  [600, "10 分钟"],
+  [1800, "30 分钟"],
+  [3600, "1 小时"],
+  [0, "从不"],
+];
 
-export default function DevicePage({
-  device,
-}: {
-  device: ConnectedDevice | null;
-}) {
+function SleepSelect({ id, value, onChange }: { id: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
+      <SelectTrigger id={id} size="sm" className="w-28">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {SLEEP_OPTIONS.map(([v, l]) => (
+          <SelectItem key={v} value={String(v)}>
+            {l}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+export default function Device() {
+  const { device, theme, setTheme, skin, setSkin } = useApp();
   const [s, setS] = useState<DeviceSettings | null>(null);
-  // The scan replaces this object every few seconds, and on a receiver link
-  // its battery percent moves with it. Reload on the board, not the object,
-  // or a drag in progress is overwritten by the read.
-  const board = device ? `${device.spec.id}:${device.path}` : null;
+  const [rate, setRate] = useState<ReportRate | null>(null);
+  const [readBack, setReadBack] = useState<ReportRate | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
-  const load = useCallback(() => {
-    getSettings()
-      .then(setS)
-      .catch((e) => toast.error(t("Failed to read settings: {e}", { e })));
+  useEffect(() => {
+    api.getSettings().then(setS).catch((e) => toast.error(`读取设置失败：${e}`));
+    api.getReportRate().then((r) => {
+      setRate(r);
+      setReadBack(r);
+    });
   }, []);
 
-  useEffect(() => {
-    if (board) load();
-    else setS(null);
-  }, [board, load]);
-
-  // The display is a second chip with its own firmware. Asking it for a
-  // version is the one screen command that means the same thing on both
-  // protocol families, so it is safe on any board: one without a display
-  // echoes the previous reply and comes back null.
-  const [screenVersion, setScreenVersion] = useState<number | null>(null);
-  useEffect(() => {
-    if (!board) {
-      setScreenVersion(null);
-      return;
-    }
-    let live = true;
-    getScreenVersion()
-      .then((v) => live && setScreenVersion(v))
-      .catch(() => {
-        // A board that will not answer simply has no display to report.
-      });
-    return () => {
-      live = false;
-    };
-  }, [board]);
-
-  // The display wants exactly its own pixels, so the picture is scaled here
-  // and handed over as plain RGB. Everything about the display's byte order
-  // lives in the backend, where the pacing is.
-  const [drawing, setDrawing] = useState(false);
-  // Which of the display's picture slots the next upload goes to. The
-  // keyboard picks which slot it shows from its own keys, so a picture
-  // sent to the wrong one looks like nothing happened.
-  const [slot, setSlot] = useState(0);
-  const slots = Math.max(1, device?.spec.screen?.layers ?? 1);
-  const drawImage = async (file: File) => {
-    const screen = device?.spec.screen;
-    if (!screen) return;
-    setDrawing(true);
+  const changeRate = async (r: ReportRate) => {
+    setRate(r);
     try {
-      const bitmap = await createImageBitmap(file);
-      const canvas = document.createElement("canvas");
-      canvas.width = screen.w;
-      canvas.height = screen.h;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error(t("could not prepare the picture"));
-      // Cover rather than stretch: a squashed photo looks like a bug.
-      const scale = Math.max(screen.w / bitmap.width, screen.h / bitmap.height);
-      const w = bitmap.width * scale;
-      const h = bitmap.height * scale;
-      ctx.drawImage(bitmap, (screen.w - w) / 2, (screen.h - h) / 2, w, h);
-      const { data } = ctx.getImageData(0, 0, screen.w, screen.h);
-      const rgb = new Array<number>(screen.w * screen.h * 3);
-      for (let i = 0, j = 0; i < data.length; i += 4) {
-        rgb[j++] = data[i];
-        rgb[j++] = data[i + 1];
-        rgb[j++] = data[i + 2];
-      }
-      await writeScreenImage(rgb, slot);
-      toast.success(
-        slots > 1
-          ? t("Picture sent to slot {n} of {m}.", { n: slot + 1, m: slots })
-          : t("Picture sent to the display."),
-      );
+      const back = await api.setReportRate(r);
+      setReadBack(back);
+      if (back === r) toast.success(`回报率已设为 ${r} Hz，回读一致`);
+      else toast.error(`键盘回读为 ${back ?? "无应答"}，设置可能没生效`);
     } catch (e) {
-      toast.error(t("Could not draw the picture: {e}", { e: String(e) }));
+      toast.error(`写入失败：${e}`);
+    }
+  };
+
+  const reset = async () => {
+    setResetting(true);
+    try {
+      await api.factoryReset();
+      toast.success("已恢复出厂设置");
+      setConfirmReset(false);
+    } catch (e) {
+      toast.error(`恢复失败：${e}`);
     } finally {
-      setDrawing(false);
+      setResetting(false);
     }
   };
 
-  /// Preview only. Nothing reaches the keyboard until commitSleep.
-  const pushSleep = (patch: Partial<SleepTimes>) =>
-    setS((prev) => (prev ? { ...prev, sleep: { ...prev.sleep, ...patch } } : prev));
-
-  const commitSleep = (patch: Partial<SleepTimes>) =>
-    setS((prev) => {
-      if (!prev) return prev;
-      const sleep = { ...prev.sleep, ...patch };
-      setSleep(sleep).catch((e) => toast.error(t("Write failed: {e}", { e })));
-      return { ...prev, sleep };
-    });
-
-  /// Preview only. Nothing reaches the keyboard until commitDebounce.
-  const pushDebounce = (value: number) =>
-    setS((prev) => (prev ? { ...prev, debounce: value } : prev));
-
-  const commitDebounce = (value: number) => {
-    setS((prev) => (prev ? { ...prev, debounce: value } : prev));
-    setDebounce(value).catch((e) => toast.error(t("Write failed: {e}", { e })));
-  };
-
-  const pushAutoOs = (enabled: boolean) => {
-    setS((prev) => (prev ? { ...prev, autoOs: enabled } : prev));
-    setAutoOs(enabled).catch((e) => toast.error(t("Write failed: {e}", { e })));
-  };
-
-  const doSetClock = async () => {
-    try {
-      await setClock(new Date());
-      toast.success(t("Clock set."));
-    } catch (e) {
-      toast.error(t("Could not set the clock: {e}", { e: String(e) }));
-    }
-  };
-
-  const doReset = async () => {
-    try {
-      await factoryReset();
-      toast.success(t("Factory reset sent. The board reboots its settings."));
-      setS(null);
-      setTimeout(load, 4500);
-    } catch (e) {
-      toast.error(t("Reset failed: {e}", { e: String(e) }));
-    }
-  };
-
-  const [transferring, setTransferring] = useState(false);
-
-  const doExport = async () => {
-    const path = await save({
-      defaultPath: `${deviceLabel(device!.spec).split(" ").join("-")}.sharkfin.json`,
-      filters: [{ name: t("sharkfin config"), extensions: ["json"] }],
-    });
-    if (!path) return;
-    setTransferring(true);
-    try {
-      toast.success(await exportConfig(path));
-    } catch (e) {
-      toast.error(t("Export failed: {e}", { e: String(e) }));
-    } finally {
-      setTransferring(false);
-    }
-  };
-
-  const doImport = async () => {
-    const path = await open({
-      multiple: false,
-      filters: [{ name: t("sharkfin config"), extensions: ["json"] }],
-    });
-    if (typeof path !== "string") return;
-    setTransferring(true);
-    try {
-      toast.success(await importConfig(path));
-      load();
-    } catch (e) {
-      toast.error(t("Import failed: {e}", { e: String(e) }));
-    } finally {
-      setTransferring(false);
-    }
-  };
-
-  const pushOptions = (patch: Partial<KbOptions>) => {
-    setS((prev) => {
-      if (!prev?.options) return prev;
-      const options = { ...prev.options, ...patch };
-      setOptions(options).catch((e) => toast.error(t("Write failed: {e}", { e })));
-      return { ...prev, options };
-    });
-  };
-
-  if (!device) {
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        {t("Connect your keyboard.")}
-      </div>
-    );
-  }
-  if (!s) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Waiting label={t("Reading device settings…")} />
-      </div>
-    );
-  }
-
-  const wireless = device.spec.features.sleep24 || device.spec.features.sleepBT;
+  const wired = device?.link === "usb";
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 p-6">
-      <PageHeader
-        title={t("Device")}
-        hint={t("{label} · firmware {revision} · device ID {deviceId} · {profiles} profiles", {
-          label: deviceLabel(device.spec),
-          revision: s.revision,
-          deviceId: device.deviceId,
-          profiles: device.spec.profiles,
-        })}
-      />
-
-      <Section title={t("Switches")}>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <Label>{t("Debounce")}</Label>
-              <span className="text-muted-foreground">{s.debounce}</span>
-            </div>
-            <Slider
-              min={1}
-              max={10}
-              step={1}
-              value={[s.debounce]}
-              onValueChange={([v]) => pushDebounce(v)}
-              onValueCommit={([v]) => commitDebounce(v)}
+    <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+      <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card title="设备信息">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[13px]">
+            <Info icon={<Cpu className="size-4" />} k="型号" v="魔咖 Monka A75 三模" />
+            <Info icon={wired ? <Cable className="size-4" /> : <Radio className="size-4" />} k="连接方式" v={wired ? "有线 USB" : "2.4G 接收器"} />
+            <Info
+              icon={<BatteryCharging className="size-4" />}
+              k="电量"
+              v={wired ? "有线供电中" : device?.battery != null ? `${device.battery}%` : "未知"}
             />
-            <p className="text-xs text-muted-foreground">
-              {t("Lower reacts faster; raise it if a switch starts chattering.")}
-            </p>
-          </div>
-      </Section>
+            <Info k="固件版本" v={device?.revision != null ? `V${device.revision.toString(16)}` : "未知"} mono />
+            <Info k="设备编号" v={String(device?.deviceId ?? "—")} mono />
+            <Info k="方案代号" v="s75 · yc500 族" mono />
+          </dl>
+          {wired && <Callout>电量只能在 2.4G 下读到：键盘本身不报电量，是接收器转报的。插线时看 Fn 键的灯：蓝色常亮表示正在充电，绿色表示已充满。</Callout>}
+        </Card>
 
-      {(device.spec.screen || screenVersion !== null) && (
-        <Section title={t("Display")}>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <Label>{t("Size")}</Label>
-              <span className="text-muted-foreground">
-                {device.spec.screen
-                  ? t("{w} by {h}", {
-                      w: device.spec.screen.w,
-                      h: device.spec.screen.h,
-                    })
-                  : t("not recorded")}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <Label>{t("Colour")}</Label>
-              <span className="text-muted-foreground">
-                {device.spec.screen
-                  ? device.spec.screen.mode === "24"
-                    ? t("24-bit")
-                    : t("16-bit")
-                  : t("not recorded")}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <Label>{t("Firmware")}</Label>
-              <span className="text-muted-foreground">
-                {screenVersion === null
-                  ? t("no answer")
-                  : screenVersion.toString(16)}
-              </span>
-            </div>
-            {canDraw(device.spec) && (
-              <div className="space-y-2 pt-2">
-                {slots > 1 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <Label>{t("Slot")}</Label>
-                    <Select value={String(slot)} onValueChange={(v) => setSlot(Number(v))} disabled={drawing}>
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: slots }, (_, i) => (
-                          <SelectItem key={i} value={String(i)}>
-                            {t("{n} of {m}", { n: i + 1, m: slots })}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="block w-full text-sm file:mr-3 file:rounded-md file:border-0
-                             file:bg-secondary file:px-3 file:py-1.5 file:text-sm"
-                  disabled={drawing || device.link === "receiver"}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.target.value = "";
-                    if (file) drawImage(file);
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {device.link === "receiver"
-                    ? t("Connect the keyboard by cable to send a picture.")
-                    : drawing
-                      ? t("Writing. Leave the keyboard plugged in.")
-                      : slots > 1
-                        ? t("The picture is scaled to fit and goes to the chosen slot. The keyboard switches between slots from its own keys.")
-                        : t("The picture is scaled to fit and replaces what is on the display.")}
-                </p>
-              </div>
-            )}
-            {device.spec.screen &&
-              !canDraw(device.spec) &&
-              !drawsElsewhere(device.spec) && (
-              <p className="text-xs text-muted-foreground">
-                {t("sharkfin reads this display but cannot draw on it yet.")}
-              </p>
-            )}
-            {device.spec.screen && drawsElsewhere(device.spec) && (
-              <p className="text-xs text-muted-foreground">
-                {t("sharkfin reads this display but cannot draw on it. The picture goes through a separate chip on this board.")}
-              </p>
-            )}
-            {!device.spec.screen && (
-              <p className="text-xs text-muted-foreground">
-                {t("sharkfin reads this display but cannot draw on it: its size is not recorded.")}
-              </p>
-            )}
-            <div className="pt-2">
-              <Row
-                label={t("Clock")}
-                hint={
-                  device.link === "receiver"
-                    ? t("Connect the keyboard by cable to set the clock.")
-                    : t("Set to this computer's time.")
-                }
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={device.link === "receiver"}
-                  onClick={doSetClock}
-                >
-                  {t("Set clock")}
-                </Button>
-              </Row>
-            </div>
+        <Card title="回报率" aside={<Tag tone="warn">待验证</Tag>}>
+          <Segmented
+            id="report-rate"
+            className="w-full"
+            value={rate ?? 1000}
+            options={[125, 250, 500, 1000].map((r) => [r as ReportRate, `${r} Hz`] as [ReportRate, string])}
+            onChange={changeRate}
+          />
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>键盘回读</span>
+            <span className="tabular font-mono">{readBack ? `${readBack} Hz` : "无应答"}</span>
           </div>
-        </Section>
-      )}
+          <Callout tone="warn">
+            原版驱动里有这项设置，但还没确认 A75 的固件会照做。回读一致只说明键盘记住了数值，实际速率要用回报率测试网页再测一次。
+          </Callout>
+        </Card>
 
-      <Section title={t("Behaviour")}>
-        <div className="space-y-3">
-          {s.options ? (
+        <Card title="按键">
+          {s ? (
             <>
-              <Row
-                label={t("Windows key lock")}
-                hint={t("Ignore the Win key while gaming")}
-              >
-                <Switch
-                  checked={s.options.winLock}
-                  onCheckedChange={(v) => pushOptions({ winLock: v })}
-                />
+              <SliderRow
+                id="debounce"
+                label="防抖时间"
+                value={s.debounce}
+                min={0}
+                max={10}
+                onChange={(v) => setS({ ...s, debounce: v })}
+                onCommit={(v) => api.setDebounce(v).then(() => toast.success(`防抖已设为 ${v} ms`)).catch((e) => toast.error(`写入失败：${e}`))}
+                format={(v) => `${v} ms`}
+                hint="出现连击（按一次出两个字）时调大一点；越小反应越快。"
+              />
+              {s.options && (
+                <>
+                  <Row label="锁定 Win 键" hint="打游戏时防止误按弹出开始菜单" htmlFor="opt-winlock">
+                    <Switch id="opt-winlock" checked={s.options.winLock} onCheckedChange={(v) => { const o = { ...s.options!, winLock: v }; setS({ ...s, options: o }); api.setOptions(o); }} />
+                  </Row>
+                  <Row label="WASD 与方向键互换" htmlFor="opt-wasd">
+                    <Switch id="opt-wasd" checked={s.options.wasdSwap} onCheckedChange={(v) => { const o = { ...s.options!, wasdSwap: v }; setS({ ...s, options: o }); api.setOptions(o); }} />
+                  </Row>
+                </>
+              )}
+            </>
+          ) : (
+            <p className="text-[13px] text-muted-foreground">读取中…</p>
+          )}
+        </Card>
+
+        <Card title="无线休眠">
+          {s ? (
+            <>
+              <Row label="2.4G 无操作后休眠" htmlFor="sleep-24">
+                <SleepSelect id="sleep-24" value={s.sleep.sleep24} onChange={(v) => { const sl = { ...s.sleep, sleep24: v }; setS({ ...s, sleep: sl }); api.setSleep(sl); }} />
               </Row>
-              <Row label={t("Swap WASD and arrows")}>
-                <Switch
-                  checked={s.options.wasdSwap}
-                  onCheckedChange={(v) => pushOptions({ wasdSwap: v })}
-                />
+              <Row label="蓝牙无操作后休眠" htmlFor="sleep-bt">
+                <SleepSelect id="sleep-bt" value={s.sleep.sleepBt} onChange={(v) => { const sl = { ...s.sleep, sleepBt: v }; setS({ ...s, sleep: sl }); api.setSleep(sl); }} />
               </Row>
-              <Row label={t("Backlight off")}>
-                <Switch
-                  checked={s.options.ledOff}
-                  onCheckedChange={(v) => pushOptions({ ledOff: v })}
-                />
+              <Row label="深度休眠" hint="更省电，唤醒稍慢" htmlFor="sleep-deep">
+                <SleepSelect id="sleep-deep" value={s.sleep.deep24} onChange={(v) => { const sl = { ...s.sleep, deep24: v, deepBt: v }; setS({ ...s, sleep: sl }); api.setSleep(sl); }} />
               </Row>
             </>
           ) : (
-            <p className="py-2 text-sm text-muted-foreground">
-              {t("This board's protocol family reports its switches in a layout sharkfin hasn't decoded, so they're hidden rather than shown wrong.")}
-            </p>
+            <p className="text-[13px] text-muted-foreground">读取中…</p>
           )}
-          <Row
-            label={t("Auto-detect host OS")}
-            hint={t("Board picks its Windows or macOS layer by itself")}
-          >
-            <Switch
-              checked={s.autoOs}
-              onCheckedChange={pushAutoOs}
+        </Card>
+
+        <Card title="外观">
+          <Row label="主题" htmlFor="theme">
+            <Segmented<ThemeChoice>
+              id="theme"
+              size="sm"
+              value={theme}
+              options={[
+                ["dark", "深色"],
+                ["light", "浅色"],
+                ["system", "跟随系统"],
+              ]}
+              onChange={setTheme}
             />
           </Row>
-          {s.options && (
-            <Row label={t("Layout mode")} hint={t("Switched on the keyboard itself")}>
-              <span className="text-sm text-muted-foreground">
-                {s.options.macMode ? "macOS" : "Windows"}
-              </span>
-            </Row>
-          )}
-        </div>
-      </Section>
+          <Row label="键盘图配色" hint="只改变软件里键盘图的样子" htmlFor="skin">
+            <Segmented<Skin>
+              id="skin"
+              size="sm"
+              value={skin}
+              options={[
+                ["white", "白色"],
+                ["photo", "黑金"],
+              ]}
+              onChange={setSkin}
+            />
+          </Row>
+        </Card>
 
-      <Section title={t("Backup")}>
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            {t("Keymaps for every profile and layer, lighting and settings, as one file. Per-key paint patterns live in the Paint tab, because the firmware can't report those back.")}
+        <Card title="恢复出厂设置">
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            清除改键、宏、逐键图案和灯效，回到出厂状态。需要插线，约 4 秒。
           </p>
-          <div className="flex shrink-0 gap-2">
-            <Button size="sm" variant="ghost" disabled={transferring} onClick={doExport}>
-              {t("Export")}
-            </Button>
-            <Button size="sm" variant="ghost" disabled={transferring} onClick={doImport}>
-              {transferring ? t("Working…") : t("Import")}
-            </Button>
-          </div>
-        </div>
-      </Section>
-
-      <Section title={t("Factory reset")}>
-        <div className="flex items-center justify-between gap-4">
-          <p className="text-sm text-muted-foreground">
-            {device?.link === "receiver"
-              ? t("Connect the keyboard by cable to reset it.")
-              : t("Clears every onboard profile, keymap, macro and light setting.")}
-          </p>
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="destructive" size="sm" disabled={device?.link === "receiver"}>
-                {t("Reset")}
+          {confirmReset ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-auto text-[13px] text-destructive">确定要清除全部设置吗？</span>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)}>取消</Button>
+              <Button variant="destructive" size="sm" disabled={resetting || !wired} onClick={reset}>
+                {resetting ? "正在恢复…" : "确定恢复"}
               </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>{t("Factory reset this keyboard?")}</DialogTitle>
-                <DialogDescription>
-                  {t("Every profile, remapped key, macro and lighting setting stored on the board is erased. This cannot be undone from here.")}
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="destructive" onClick={doReset}>
-                  {t("Erase and reset")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </Section>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" className="self-start" disabled={!wired} onClick={() => setConfirmReset(true)}>
+              <RotateCcw />
+              恢复出厂设置
+            </Button>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
 
-      {wireless && (
-        <Section title={t("Wireless sleep")}>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {(
-              [
-                ["sleep24", t("Sleep · 2.4 GHz"), "sleep24" as const, SLEEP_MIN],
-                ["sleepBT", t("Sleep · Bluetooth"), "sleepBt" as const, SLEEP_MIN],
-                ["sleep24", t("Deep sleep · 2.4 GHz"), "deep24" as const, DEEP_MIN],
-                ["sleepBT", t("Deep sleep · Bluetooth"), "deepBt" as const, DEEP_MIN],
-              ] as const
-            ).map(([feature, label, key, min]) =>
-              device.spec.features[feature] ? (
-                <div key={key} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <Label>{label}</Label>
-                    <span className="text-muted-foreground">
-                      {mins(s.sleep[key])}
-                    </span>
-                  </div>
-                  <Slider
-                    min={min}
-                    max={SLEEP_MAX}
-                    step={60}
-                    value={[Math.max(s.sleep[key], min)]}
-                    onValueChange={([v]) => pushSleep({ [key]: v })}
-                    onValueCommit={([v]) => commitSleep({ [key]: v })}
-                  />
-                </div>
-              ) : null,
-            )}
-          </div>
-        </Section>
-      )}
+function Info({ icon, k, v, mono }: { icon?: ReactNode; k: string; v: string; mono?: boolean }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {icon}
+        {k}
+      </dt>
+      <dd className={mono ? "truncate font-mono text-[13px]" : "truncate"}>{v}</dd>
     </div>
   );
 }

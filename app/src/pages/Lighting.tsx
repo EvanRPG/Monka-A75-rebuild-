@@ -1,439 +1,207 @@
-// SPDX-FileCopyrightText: JR Lanteigne <root@dnim.dev>
-// SPDX-License-Identifier: GPL-3.0-or-later
-import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
-import { Label } from "@/components/ui/label";
-import { Banner, Chip, PageHeader, Section } from "@/components/Page";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Keyboard } from "@/components/Keyboard";
+import { ColorSwatches, Section, Segmented, SliderRow, Workspace, Tag } from "@/components/parts";
+import { BRIGHTNESS_MAX, EFFECTS, SPEED_MAX, effectByMode, ledOf, type Effect } from "@/lib/a75";
+import { colorAt, type Rgb } from "@/lib/effects";
+import type { LedParam } from "@/lib/backend";
+import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { t } from "@/lib/i18n";
-import Waiting from "@/components/Waiting";
-import EffectPreview from "@/components/EffectPreview";
-import { useBoardLayout } from "@/lib/layout-loader";
-import { readChoice, writeChoice } from "@/lib/led-flags-store";
-import type { Family } from "@/lib/effects";
-import { BE_MODES, MODE_LABELS, type LightMode } from "@/lib/lighting-modes";
-import {
-  getLedParam,
-  getSettings,
-  setLedFlagsSwapped,
-  setLedParam,
-  setOptions,
-  setSideLight,
-  type KbOptions,
-  type ConnectedDevice,
-  type LedParam,
-  type SledParam,
-} from "@/lib/backend";
+import { toast } from "sonner";
+import type { PageId } from "@/App";
 
-// Side/edge light: its own small mode table, and speed is not inverted.
-const SIDE_MODES = [
-  { value: 0, label: "Off" },
-  { value: 1, label: "Static" },
-  { value: 2, label: "Breathing" },
-  { value: 3, label: "Spectrum", noColor: true },
-  { value: 4, label: "Wave" },
-  { value: 5, label: "Snake" },
-];
-
-const SWATCHES = [
-  "#ff0000",
-  "#ff8000",
-  "#ffff00",
-  "#00ff00",
-  "#00ffff",
-  "#0000ff",
-  "#ff00ff",
-  "#ffffff",
-];
-
-function hexToRgb(hex: string) {
-  const v = parseInt(hex.replace("#", ""), 16);
-  return { r: (v >> 16) & 0xff, g: (v >> 8) & 0xff, b: v & 0xff };
+/** A tiny animated hint of each effect on its tile. */
+function tileGradient(e: Effect): string {
+  if (e.kind === "music") return "linear-gradient(90deg,#4d8dff 0 12%,transparent 12% 16%,#7b6cff 16% 30%,transparent 30% 34%,#bf5af2 34% 52%,transparent 52% 56%,#ff3791 56% 66%,transparent 66% 70%,#ff9500 70% 78%,transparent 78%)";
+  if (e.kind === "screen") return "linear-gradient(90deg,#1e3a8a,#0ea5e9,#f59e0b)";
+  if (e.kind === "custom") return "repeating-linear-gradient(90deg,#ff3b30 0 10%,#ffd60a 10% 20%,#34c759 20% 30%,#4d8dff 30% 40%)";
+  if (!e.rgb) return "linear-gradient(90deg,#ff3b30,#ffd60a,#34c759,#00c7be,#4d8dff,#bf5af2)";
+  return "";
 }
 
-function rgbToHex(r: number, g: number, b: number) {
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
-}
-
-// Below this the firmware renders "all LEDs off" (the backend floors such
-// writes); picking it means the user wants the backlight off.
-const isNearBlack = (c: { r: number; g: number; b: number }) =>
-  Math.max(c.r, c.g, c.b) < 8;
-
-// Lighting is flash. Drag previews; write once on release.
-const WRITE_GAP = 300;
-
-/** The effects to offer: the board's own table when the registry has one,
- *  else the common set. Speed is capped at the wire's 0..4 whatever the
- *  vendor's slider claims. */
-function modesFor(device: ConnectedDevice | null): { modes: LightMode[]; brightnessMax: number } {
-  const table = device?.spec.light;
-  if (!table) return { modes: BE_MODES, brightnessMax: 4 };
-  const modes: LightMode[] = table.effects
-    .filter((e) => e.mode in MODE_LABELS)
-    .map((e) => ({
-      value: e.mode,
-      label: MODE_LABELS[e.mode],
-      options: e.options ?? undefined,
-      noColor: !e.rgb,
-      noSpeed: e.speedMax == null,
-      speedMax: Math.min(e.speedMax ?? 4, 4),
-    }));
-  return { modes, brightnessMax: Math.max(1, table.brightnessMax) };
-}
-
-export default function LightingPage({ device }: { device: ConnectedDevice | null }) {
-  const connected = !!device;
-  const { modes, brightnessMax } = modesFor(device);
-  const { layout, resolving } = useBoardLayout(device);
-  const [param, setParam] = useState<LedParam | null>(null);
-  const [side, setSide] = useState<SledParam | null>(null);
-  const [opts, setOpts] = useState<KbOptions | null>(null);
-  /** Which way round this board reads the rainbow flag, and whether that is
-   *  the owner's answer rather than the registry's. */
-  const [swapped, setSwapped] = useState(false);
-  const [owned, setOwned] = useState(false);
-  const defaultSwap = useRef(false);
-  const paramRef = useRef<LedParam | null>(null);
-  const sideRef = useRef<SledParam | null>(null);
-  const pushTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const sideTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const lastSent = useRef(0);
-  const lastSideSent = useRef(0);
+export default function Lighting({ go }: { go: (p: PageId) => void }) {
+  const { led, setLed } = useApp();
+  const [draft, setDraft] = useState<LedParam | null>(led);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!device) {
-      setParam(null);
-      return;
-    }
-    // The flag decides how a reply is read as well as how a packet is
-    // written, so the owner's answer goes in before the first read.
-    const id = device.spec.id;
-    const dflt = device.spec.ledFlagsSwapped ?? false;
-    const stale = readChoice(id);
-    const choice = stale && stale.dflt === dflt ? stale : null;
-    if (stale && !choice) writeChoice(id, null);
-    defaultSwap.current = dflt;
-    setSwapped(choice ? choice.swapped : dflt);
-    setOwned(!!choice);
-    (choice ? setLedFlagsSwapped(choice.swapped) : Promise.resolve())
-      .then(getLedParam)
-      .then((p) => {
-        paramRef.current = p;
-        setParam(p);
-      })
-      .catch((e) => toast.error(t("Failed to read lighting: {e}", { e })));
-    getSettings()
-      .then((s) => {
-        sideRef.current = s.sideLight;
-        setSide(s.sideLight);
-        setOpts(s.options);
-      })
-      .catch(() => {
-        setSide(null);
-        setOpts(null);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, device?.spec.id]);
+    if (led && !draft) setDraft(led);
+  }, [led, draft]);
 
-  const setLedOff = (ledOff: boolean) => {
-    if (!opts || opts.ledOff === ledOff) return;
-    const next = { ...opts, ledOff };
-    setOpts(next);
-    setOptions(next).catch((e) => toast.error(t("Write failed: {e}", { e })));
+  const effect = draft ? effectByMode(draft.mode) : undefined;
+
+  /** Live apply, coalesced so a slider drag sends one frame per pause. */
+  const apply = (p: LedParam) => {
+    setDraft(p);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      setLed(p).catch((e) => toast.error(`写入失败：${e}`));
+    }, 180);
   };
 
-  /// Preview only. Nothing reaches the keyboard until commitSide.
-  const updateSide = (patch: Partial<SledParam>) => {
-    const base = sideRef.current;
-    if (!base) return;
-    const next = { ...base, ...patch };
-    sideRef.current = next;
-    setSide(next);
+  const lightFn = useMemo(() => {
+    if (!draft || !effect || effect.kind !== "onboard") return null;
+    const p = {
+      mode: draft.mode,
+      speed: draft.speed,
+      brightness: draft.brightness,
+      brightnessMax: BRIGHTNESS_MAX,
+      option: draft.option,
+      rainbow: !effect.rgb || draft.dazzle,
+      r: draft.r,
+      g: draft.g,
+      b: draft.b,
+    };
+    return (k: Parameters<typeof ledOf>[0], i: number, frame: number): Rgb => colorAt("yc500", p, ledOf(k), i, frame);
+  }, [draft, effect]);
+
+  if (!draft) return null;
+
+  const onboard = EFFECTS.filter((e) => e.kind === "onboard");
+  const hosted = EFFECTS.filter((e) => e.kind !== "onboard");
+
+  const pick = (e: Effect) => {
+    if (e.kind === "custom") return go("paint");
+    if (e.kind === "music") return go("music");
+    if (e.kind === "screen") return go("screen");
+    apply({ ...draft, mode: e.mode, option: Math.min(draft.option, (e.options?.length ?? 1) - 1) });
   };
-
-  const commitSide = (patch?: Partial<SledParam>) => {
-    if (patch) updateSide(patch);
-    const next = sideRef.current;
-    if (!next) return;
-    clearTimeout(sideTimer.current);
-    sideTimer.current = setTimeout(
-      () => {
-        lastSideSent.current = Date.now();
-        setSideLight(next).catch((e) => toast.error(t("Write failed: {e}", { e })));
-      },
-      Math.max(0, WRITE_GAP - (Date.now() - lastSideSent.current)),
-    );
-  };
-
-  /// Preview only. Nothing reaches the keyboard until commit.
-  const update = (patch: Partial<LedParam>) => {
-    const base = paramRef.current;
-    if (!base) return;
-    const next = { ...base, ...patch };
-    paramRef.current = next;
-    setParam(next);
-  };
-
-  /// For controls that stream while in use, like the OS colour dialog:
-  /// preview every step, write once the user stops moving.
-  const commitIdle = (patch: Partial<LedParam>) => {
-    update(patch);
-    clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => commit(), 800);
-  };
-
-  const commit = (patch?: Partial<LedParam>) => {
-    if (patch) update(patch);
-    const next = paramRef.current;
-    if (!next) return;
-    clearTimeout(pushTimer.current);
-    pushTimer.current = setTimeout(
-      () => {
-        lastSent.current = Date.now();
-        setLedParam(next).catch((e) => toast.error(t("Write failed: {e}", { e })));
-      },
-      Math.max(0, WRITE_GAP - (Date.now() - lastSent.current)),
-    );
-  };
-
-  // Black is not a colour the LEDs can show, so route it to the real
-  // backlight-off switch instead, and wake the backlight on any colour pick.
-  const pickColor = (rgb: { r: number; g: number; b: number }) => {
-    if (isNearBlack(rgb) && opts) {
-      setLedOff(true);
-      toast(t("Backlight off. Pick a colour to light it back up."));
-      return;
-    }
-    setLedOff(false);
-    commit({ ...rgb, dazzle: false });
-  };
-
-  // The board keeps the flag it was sent, so the same settings go back out
-  // under the other reading and the keyboard follows at once.
-  const applySwap = (next: boolean) => {
-    if (!device) return;
-    const own = next !== defaultSwap.current;
-    setSwapped(next);
-    setOwned(own);
-    writeChoice(device.spec.id, own ? { swapped: next, dflt: defaultSwap.current } : null);
-    setLedFlagsSwapped(next)
-      .then(() => commit())
-      .catch((e) => toast.error(t("Write failed: {e}", { e })));
-  };
-
-  if (!connected) {
-    return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        {t("Connect your keyboard to configure lighting.")}
-      </div>
-    );
-  }
-  if (!param) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Waiting label={t("Reading current lighting…")} />
-      </div>
-    );
-  }
-
-  const mode = modes.find((m) => m.value === param.mode);
-  const hex = rgbToHex(param.r, param.g, param.b);
-  const colorless = mode?.noColor ?? false;
-  // The preview is timed from the firmware of the two families; a board
-  // whose family is still unknown is drawn on the gen2 clock.
-  const family: Family = device.spec.family === "yc500" ? "yc500" : "gen2";
-
-  const slider = (
-    label: string,
-    value: number,
-    max: number,
-    onChange: (v: number) => void,
-    onCommit: (v: number) => void,
-    muted = false,
-  ) => (
-    <div className={cn("space-y-2", muted && "pointer-events-none opacity-50")}>
-      <div className="flex justify-between text-sm">
-        <Label>{label}</Label>
-        <span className="text-muted-foreground">
-          {value}/{max}
-        </span>
-      </div>
-      <Slider
-        min={0}
-        max={max}
-        step={1}
-        value={[value]}
-        onValueChange={([v]) => onChange(v)}
-        onValueCommit={([v]) => onCommit(v)}
-      />
-    </div>
-  );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 p-6">
-      <PageHeader
-        title={t("Lighting")}
-        hint={t("Backlight effect, color and motion. Changes apply live.")}
-      />
-
-      {!resolving && !opts?.ledOff && (
-        <EffectPreview
-            layout={layout}
-            family={family}
-            param={{
-              mode: param.mode,
-              speed: param.speed,
-              brightness: param.brightness,
-              brightnessMax,
-              option: param.option,
-              rainbow: colorless || param.dazzle,
-              r: param.r,
-              g: param.g,
-              b: param.b,
-            }}
-          />
-      )}
-
-      <Section title={t("Effect")}>
-        <div className="flex flex-wrap gap-1">
-          {modes.map((m) => (
-            <Chip key={m.value} on={param.mode === m.value} onClick={() => commit({ mode: m.value, option: 0 })}>
-              {t(m.label)}
-            </Chip>
-          ))}
-        </div>
-        {mode?.options && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">{t("Direction")}</span>
-            {mode.options.map((opt, i) =>
-              opt === null ? null : (
-                <Chip key={opt} on={param.option === i} onClick={() => commit({ option: i })} className="text-xs">
-                  {t(opt)}
-                </Chip>
-              ),
-            )}
+    <Workspace
+      stage={<Keyboard light={lightFn} showKnob={false} />}
+      below={
+        <div className="flex flex-col gap-5">
+          <div>
+            <div className="mb-2.5 flex items-center gap-2">
+              <h3 className="text-[13px] font-semibold">板载灯效</h3>
+              <span className="text-xs text-muted-foreground">由键盘自己运行，拔掉线也保留</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+              {onboard.map((e) => (
+                <EffectTile key={e.mode} e={e} active={draft.mode === e.mode} onClick={() => pick(e)} color={[draft.r, draft.g, draft.b]} />
+              ))}
+            </div>
           </div>
-        )}
-      </Section>
-
-      <Section
-        title={t("Color")}
-        hint={colorless ? t("This effect brings its own colours.") : undefined}
-        className={cn(colorless && "opacity-50")}
-      >
-        {opts?.ledOff && (
-          <Banner>{t("The backlight is off. Pick a colour or rainbow to light it back up.")}</Banner>
-        )}
-        <div className="flex flex-wrap items-center gap-3">
-          {SWATCHES.map((c) => (
-            <button
-              key={c}
-              disabled={colorless}
-              onClick={() => pickColor(hexToRgb(c))}
-              className={cn(
-                "h-8 w-8 rounded-full transition-transform enabled:hover:scale-110",
-                !param.dazzle && hex === c && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
-              )}
-              style={{ backgroundColor: c }}
-              aria-label={c}
-            />
-          ))}
-          <input
-            type="color"
-            value={hex}
-            disabled={colorless}
-            onChange={(e) => commitIdle({ ...hexToRgb(e.target.value), dazzle: false })}
-            className="h-8 w-8 cursor-pointer rounded-full bg-transparent"
-            aria-label={t("Custom color")}
-          />
-          <label htmlFor="dazzle" className="ml-auto flex items-center gap-2 text-sm">
-            {t("Rainbow")}
-            <Switch
-              id="dazzle"
-              disabled={colorless}
-              checked={colorless ? true : param.dazzle}
-              onCheckedChange={(v) => {
-                if (v) setLedOff(false);
-                commit({ dazzle: v });
-              }}
-            />
-          </label>
+          <div>
+            <div className="mb-2.5 flex items-center gap-2">
+              <h3 className="text-[13px] font-semibold">需要电脑配合</h3>
+              <span className="text-xs text-muted-foreground">由本软件实时计算后发给键盘</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+              {hosted.map((e) => (
+                <EffectTile key={e.mode} e={e} active={false} onClick={() => pick(e)} color={[draft.r, draft.g, draft.b]} link />
+              ))}
+            </div>
+          </div>
         </div>
-        {!colorless && (
-          <p className="text-xs text-muted-foreground">
-            {owned ? (
+      }
+      panel={
+        <>
+          <div className="px-5 pt-5 pb-4">
+            <div className="text-xs text-muted-foreground">当前灯效</div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-lg font-semibold">{effect?.name ?? `模式 ${draft.mode}`}</span>
+              <Tag tone="ok">已同步</Tag>
+            </div>
+          </div>
+          <Section title="参数">
+            <SliderRow
+              id="led-brightness"
+              label="亮度"
+              value={draft.brightness}
+              min={0}
+              max={BRIGHTNESS_MAX}
+              onChange={(v) => apply({ ...draft, brightness: v })}
+              format={(v) => (v === 0 ? "关闭" : `${v} / ${BRIGHTNESS_MAX}`)}
+            />
+            {effect?.speed && (
+              <SliderRow
+                id="led-speed"
+                label="速度"
+                value={draft.speed}
+                min={0}
+                max={SPEED_MAX}
+                onChange={(v) => apply({ ...draft, speed: v })}
+                format={(v) => ["最慢", "慢", "中", "快", "最快"][v]}
+              />
+            )}
+          </Section>
+          {effect?.options && (
+            <Section title="方向">
+              <Segmented
+                id="led-direction"
+                className="w-full"
+                value={draft.option}
+                options={effect.options.map((o, i) => [i, o] as [number, string])}
+                onChange={(v) => apply({ ...draft, option: v })}
+              />
+            </Section>
+          )}
+          <Section title="颜色">
+            {effect?.rgb ? (
               <>
-                {t("Swapped for this board.")}{" "}
-                <button
-                  className="text-primary underline underline-offset-2"
-                  onClick={() => applySwap(defaultSwap.current)}
-                >
-                  {t("Undo")}
-                </button>
+                <Segmented
+                  id="led-colormode"
+                  className="w-full"
+                  value={draft.dazzle ? "rainbow" : "single"}
+                  options={[
+                    ["single", "单色"],
+                    ["rainbow", "七彩"],
+                  ]}
+                  onChange={(v) => apply({ ...draft, dazzle: v === "rainbow" })}
+                />
+                {!draft.dazzle && (
+                  <ColorSwatches
+                    id="led-color"
+                    value={[draft.r, draft.g, draft.b]}
+                    onChange={([r, g, b]) => apply({ ...draft, r, g, b })}
+                  />
+                )}
               </>
             ) : (
-              <>
-                {t("Rainbow where you picked a colour, or one colour where you asked for the rainbow?")}{" "}
-                <button
-                  className="text-primary underline underline-offset-2"
-                  onClick={() => applySwap(!swapped)}
-                >
-                  {t("Swap them")}
-                </button>
-              </>
+              <p className="text-[13px] text-muted-foreground">这个灯效固定为七彩，不能选颜色。</p>
             )}
-          </p>
-        )}
-      </Section>
+          </Section>
+          <Section title="说明">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              修改立即生效。左侧预览是示意，实际效果以键盘为准。Fn 键的灯用来显示充电和配对状态，不跟随灯效。
+            </p>
+          </Section>
+        </>
+      }
+    />
+  );
+}
 
-      <Section title={t("Motion")}>
-        <div className="grid gap-6 sm:grid-cols-2">
-          {slider(t("Brightness"), param.brightness, brightnessMax, (v) => update({ brightness: v }), (v) => commit({ brightness: v }))}
-          {slider(t("Speed"), param.speed, mode?.speedMax ?? 4, (v) => update({ speed: v }), (v) => commit({ speed: v }), !!mode?.noSpeed)}
-        </div>
-      </Section>
-
-      {side && (
-        <Section title={t("Edge light")}>
-          <div className="flex flex-wrap gap-1">
-            {SIDE_MODES.map((m) => (
-              <Chip key={m.value} on={side.mode === m.value} onClick={() => commitSide({ mode: m.value })}>
-                {t(m.label)}
-              </Chip>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            {SWATCHES.map((c) => (
-              <button
-                key={c}
-                onClick={() => commitSide({ ...hexToRgb(c), dazzle: false })}
-                className={cn(
-                  "h-7 w-7 rounded-full transition-transform hover:scale-110",
-                  !side.dazzle && rgbToHex(side.r, side.g, side.b) === c && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
-                )}
-                style={{ backgroundColor: c }}
-                aria-label={c}
-              />
-            ))}
-            <label htmlFor="side-dazzle" className="ml-auto flex items-center gap-2 text-sm">
-              {t("Rainbow")}
-              <Switch
-                id="side-dazzle"
-                checked={side.dazzle}
-                onCheckedChange={(v) => commitSide({ dazzle: v })}
-              />
-            </label>
-          </div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            {slider(t("Brightness"), side.brightness, 4, (v) => updateSide({ brightness: v }), (v) => commitSide({ brightness: v }))}
-            {slider(t("Speed"), side.speed, 4, (v) => updateSide({ speed: v }), (v) => commitSide({ speed: v }))}
-          </div>
-        </Section>
+function EffectTile({
+  e,
+  active,
+  onClick,
+  color,
+  link,
+}: {
+  e: Effect;
+  active: boolean;
+  onClick: () => void;
+  color: number[];
+  link?: boolean;
+}) {
+  const g = tileGradient(e) || `linear-gradient(90deg, rgb(${color.join(",")}) , rgb(${color.join(",")}))`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "group flex h-[58px] flex-col justify-between rounded-lg border px-3 py-2 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active ? "border-primary bg-primary/10" : "border-border bg-card hover:border-input hover:bg-accent",
       )}
-    </div>
+    >
+      <span className="flex items-center justify-between gap-1 text-[13px] font-medium">
+        <span className="truncate">{e.name}</span>
+        {link && <span className="text-xs text-muted-foreground group-hover:text-foreground">›</span>}
+      </span>
+      <span className="h-1 w-full rounded-full opacity-80" style={{ background: g }} />
+    </button>
   );
 }

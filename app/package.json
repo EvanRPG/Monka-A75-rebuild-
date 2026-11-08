@@ -42,6 +42,7 @@
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
+    "vite-plugin-singlefile": "^2.3.0",
     "vitest": "^4.1.10"
   }
 }

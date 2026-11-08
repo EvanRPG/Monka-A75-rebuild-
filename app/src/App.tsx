@@ -1,324 +1,214 @@
-// SPDX-FileCopyrightText: JR Lanteigne <root@dnim.dev>
-// SPDX-FileCopyrightText: Shiroki Satsuki <me@shirok1.dev>
-// SPDX-License-Identifier: GPL-3.0-or-later
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Brush,
-  HeartHandshake,
-  Keyboard,
-  Lightbulb,
-  ListMusic,
-  Radio,
-  Settings2,
-  Usb,
-  Magnet,
-} from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Toaster } from "@/components/ui/sonner";
+import { useEffect, useState, type ComponentType } from "react";
+import { AppProvider, useApp } from "@/lib/store";
+import { IS_DESKTOP } from "@/lib/backend";
+import { Toaster } from "@/components/parts";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { t, LOCALES, locale, setLocale } from "@/lib/i18n";
-import { deviceLabel } from "@/lib/brands";
-import { loadOwner } from "@/lib/owner-record";
-import { loadWizard, setupDone } from "@/lib/wizard";
 import {
-  applyOwnerRecord,
-  scan,
-  type ConnectedDevice,
-  type DiscoveredUnknown,
-  type InputMonitoringStatus,
-} from "@/lib/backend";
-import ColorwayPicker from "@/components/ColorwayPicker";
-import SharkfinLogo from "@/components/SharkfinLogo";
-import PermissionNotice from "@/components/PermissionNotice";
-import ReadOnlyNotice from "@/components/ReadOnlyNotice";
-import UnregisteredNotice from "@/components/UnregisteredNotice";
-import LightingPage from "@/pages/Lighting";
-import KeymapPage from "@/pages/Keymap";
-import DevicePage from "@/pages/Device";
-import PaintPage from "@/pages/Paint";
-import MacrosPage from "@/pages/Macros";
-import ContributePage from "@/pages/Contribute";
-import CheckPage from "@/pages/Check";
-import CheckIcon from "@/components/CheckIcon";
-import SwitchesPage, { hasSwitches } from "@/pages/Switches";
+  AudioLines,
+  Battery,
+  Brush,
+  Cable,
+  Keyboard as KeyboardIcon,
+  Lightbulb,
+  ListVideo,
+  Monitor,
+  Moon,
+  Radio,
+  SlidersHorizontal,
+  Sun,
+} from "lucide-react";
+import Lighting from "@/pages/Lighting";
+import Paint from "@/pages/Paint";
+import Music from "@/pages/Music";
+import Screen from "@/pages/Screen";
+import Keys from "@/pages/Keys";
+import Macros from "@/pages/Macros";
+import Device from "@/pages/Device";
 
-type Page =
-  | "check"
-  | "lighting"
-  | "paint"
-  | "keymap"
-  | "switches"
-  | "macros"
-  | "settings"
-  | "contribute";
+export type PageId = "lighting" | "paint" | "music" | "screen" | "keys" | "macros" | "device";
 
-const readOnly = (d: ConnectedDevice) => d.readOnly;
+interface PageDef {
+  id: PageId;
+  name: string;
+  desc: string;
+  icon: ComponentType<{ className?: string }>;
+  group: "灯光" | "按键" | "设备";
+}
 
-const NAV: {
-  id: Page;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}[] = [
-  { id: "check", label: "Setup", icon: CheckIcon },
-  { id: "lighting", label: "Lighting", icon: Lightbulb },
-  { id: "paint", label: "Paint", icon: Brush },
-  { id: "keymap", label: "Keys", icon: Keyboard },
-  { id: "switches", label: "Switches", icon: Magnet },
-  { id: "macros", label: "Macros", icon: ListMusic },
-  { id: "settings", label: "Device", icon: Settings2 },
-  { id: "contribute", label: "Contribute", icon: HeartHandshake },
+const PAGES: PageDef[] = [
+  { id: "lighting", name: "灯效", desc: "18 种板载灯效，亮度、速度、颜色、方向", icon: Lightbulb, group: "灯光" },
+  { id: "paint", name: "逐键灯光", desc: "给每个键单独上色，存进键盘", icon: Brush, group: "灯光" },
+  { id: "music", name: "音乐律动", desc: "电脑分析声音，键盘跟着节奏亮", icon: AudioLines, group: "灯光" },
+  { id: "screen", name: "屏幕光影", desc: "键盘跟随屏幕主色变化", icon: Monitor, group: "灯光" },
+  { id: "keys", name: "按键", desc: "改键、Fn 层和旋钮", icon: KeyboardIcon, group: "按键" },
+  { id: "macros", name: "宏", desc: "录制一串按键，绑定到任意键", icon: ListVideo, group: "按键" },
+  { id: "device", name: "设备", desc: "回报率、防抖、休眠、恢复出厂", icon: SlidersHorizontal, group: "设备" },
 ];
 
-export default function App() {
-  const [page, setPage] = useState<Page>("lighting");
-  const [device, setDevice] = useState<ConnectedDevice | null>(null);
-  const [unknown, setUnknown] = useState<DiscoveredUnknown | null>(null);
-  const [openFailed, setOpenFailed] = useState(false);
-  const [inputMonitoring, setInputMonitoring] = useState<InputMonitoringStatus | null>(null);
-  const [stalled, setStalled] = useState(false);
-  const [asleep, setAsleep] = useState(false);
-  const [scanning, setScanning] = useState(true);
-  const guided = useRef<number | null>(null);
-  const guidedUnknown = useRef<string | null>(null);
+function readHash(): PageId {
+  const h = typeof location !== "undefined" ? location.hash.slice(1) : "";
+  return (PAGES.find((p) => p.id === h)?.id ?? "lighting") as PageId;
+}
 
-  // Read-only: Contribute once per board, not on every scan.
+function Shell() {
+  const { device, scanning, theme, setTheme } = useApp();
+  const [page, setPage] = useState<PageId>(readHash);
+
   useEffect(() => {
-    if (device && readOnly(device) && guided.current !== device.deviceId) {
-      guided.current = device.deviceId;
-      setPage("contribute");
-    }
-  }, [device]);
-
-  // Unknown board: same.
-  useEffect(() => {
-    if (!device && unknown && guidedUnknown.current !== unknown.path) {
-      guidedUnknown.current = unknown.path;
-      setPage("contribute");
-    }
-  }, [device, unknown]);
-
-  // Apply the check record once per connect. Sends nothing.
-  const applied = useRef<string | null>(null);
-  useEffect(() => {
-    if (!device) {
-      applied.current = null;
-      return;
-    }
-    const key = `${device.spec.id}:${device.path}`;
-    if (applied.current === key) return;
-    applied.current = key;
-    const record = loadOwner(device.spec.id);
-    if (!record) return;
-    applyOwnerRecord(record)
-      .then(() => doScan())
-      .catch(() => {
-        applied.current = null;
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device?.spec.id, device?.path]);
-
-  // Setup tab while the board is unknown or read-only and the check has
-  // not been run. Everywhere else it is a button on Contribute.
-  const needsCheck =
-    !!device &&
-    (device.spec.unregistered || device.readOnly) &&
-    !setupDone(loadWizard(device.spec.id));
-
-  const doScan = useCallback(async () => {
-    try {
-      const r = await scan();
-      setDevice(r.connected);
-      setUnknown(r.unknown[0] ?? null);
-      setOpenFailed(r.openFailed);
-      setInputMonitoring(r.inputMonitoring);
-      setStalled(r.stalled);
-      setAsleep(r.keyboardOffline);
-    } catch {
-      setDevice(null);
-      setUnknown(null);
-      setOpenFailed(false);
-      setAsleep(false);
-    } finally {
-      setScanning(false);
-    }
+    const on = () => setPage(readHash());
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
   }, []);
 
-  useEffect(() => {
-    doScan();
-    const t = setInterval(doScan, 3000);
-    window.addEventListener("focus", doScan);
-    return () => {
-      clearInterval(t);
-      window.removeEventListener("focus", doScan);
-    };
-  }, [doScan]);
+  const go = (p: PageId) => {
+    setPage(p);
+    try {
+      history.replaceState(null, "", `#${p}`);
+    } catch {
+      /* sandboxed */
+    }
+  };
+
+  const def = PAGES.find((p) => p.id === page)!;
+  const groups = ["灯光", "按键", "设备"] as const;
+  const dark = theme === "dark" || (theme === "system" && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
 
   return (
-    <div className="flex h-screen bg-background text-foreground">
-      <aside className="flex w-56 shrink-0 flex-col bg-sidebar">
-        <div className="flex items-center gap-2 px-4 py-4">
-          <span className="text-primary">
-            <SharkfinLogo size={26} />
-          </span>
-          <span className="font-mono text-lg font-bold tracking-tighter">
-            sharkfin
-          </span>
-        </div>
-        <Separator />
-        <nav className="flex flex-col gap-1 p-2">
-          {NAV.filter(
-            ({ id }) =>
-              (id !== "switches" || hasSwitches(device)) && (id !== "check" || needsCheck),
-          ).map(
-            ({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => setPage(id)}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
-                  page === id
-                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                    : "text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                {t(label)}
-              </button>
-            ),
-          )}
-        </nav>
-        <div className="mt-auto space-y-2 p-3">
-          <div className="rounded-xl bg-sidebar-accent/60 p-3">
-            <div className="flex items-center gap-2">
-              {device?.link === "receiver" ? (
-                <Radio className="h-4 w-4 text-(--key-accent)" />
-              ) : (
-                <Usb
-                  className={cn(
-                    "h-4 w-4",
-                    device ? "text-(--key-accent)" : "text-muted-foreground",
-                  )}
-                />
-              )}
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">
-                  {device
-                    ? deviceLabel(device.spec)
-                    : stalled
-                      ? "Needs a replug"
-                      : asleep
-                        ? t("Keyboard asleep")
-                        : unknown
-                          ? unknown.product || "Unrecognized keyboard"
-                          : scanning
-                            ? "Scanning…"
-                            : "No device"}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {device ? (
-                    <span
-                      className={cn(
-                        "mt-1 block truncate",
-                        !readOnly(device) && "text-(--key-accent)",
-                      )}
-                    >
-                      {device.spec.unregistered
-                        ? t("not in the registry · {family}", {
-                            family: device.spec.family ?? "",
-                          })
-                        : readOnly(device)
-                          ? t("read-only")
-                          : device.link === "receiver"
-                            ? t("2.4 GHz · id {id}", { id: device.deviceId }) +
-                              (device.battery === null
-                                ? ""
-                                : ` · ${device.battery}%`)
-                            : t("USB · id {id}", { id: device.deviceId })}
-                    </span>
-                  ) : stalled ? (
-                    t("Unplug, wait 10s, plug back in")
-                  ) : asleep ? (
-                    t("Press a key, or connect by cable")
-                  ) : unknown ? (
-                    <span className="mt-1 block">
-                      {unknown.deviceId === null
-                        ? t("no answer")
-                        : t("not in the registry")}
-                    </span>
-                  ) : (
-                    t("Connect by cable")
-                  )}
-                </div>
-              </div>
-            </div>
+    <div className="flex h-full min-h-0 flex-col bg-background text-foreground md:flex-row">
+      <aside className="flex shrink-0 flex-col border-b border-border bg-sidebar md:w-[212px] md:border-r md:border-b-0">
+        <div className="flex h-14 items-center gap-2.5 px-4">
+          <div className="grid size-7 place-items-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground">A75</div>
+          <div className="leading-tight">
+            <div className="text-[13px] font-semibold">魔咖 A75</div>
+            <div className="text-[11px] text-muted-foreground">键盘驱动</div>
           </div>
-          <ColorwayPicker />
-          <Select value={locale} onValueChange={setLocale}>
-            <SelectTrigger
-              aria-label={t("Language")}
-              className="h-8 w-full text-xs"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LOCALES.map(([value, label]) => (
-                <SelectItem key={value} value={value} className="text-xs">
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-1 md:flex-col md:gap-0 md:overflow-visible md:pb-0">
+          {groups.map((g) => (
+            <div key={g} className="contents md:mb-3 md:block">
+              <div className="hidden px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground md:block">{g}</div>
+              {PAGES.filter((p) => p.group === g).map((p) => {
+                const Icon = p.icon;
+                const on = p.id === page;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => go(p.id)}
+                    aria-current={on ? "page" : undefined}
+                    className={cn(
+                      "flex h-8 shrink-0 items-center gap-2.5 rounded-md px-2.5 text-[13px] whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring md:w-full",
+                      on ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                    )}
+                  >
+                    <Icon className={cn("size-4", on && "text-primary")} />
+                    {p.name}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+        <div className="hidden border-t border-border p-3 md:block">
+          <DeviceCard />
         </div>
       </aside>
 
-      <main className="flex flex-1 flex-col overflow-hidden">
-        {device && device.spec.unregistered ? (
-          <UnregisteredNotice
-            device={device}
-            onAllowed={doScan}
-            onCheck={() => setPage("check")}
-            onContribute={() => setPage("contribute")}
-          />
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+        <header className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border px-4 py-2 sm:px-6">
+          <div className="mr-auto min-w-0">
+            <h1 className="text-[15px] font-semibold">{def.name}</h1>
+            <p className="truncate text-xs text-muted-foreground">{def.desc}</p>
+          </div>
+          {!IS_DESKTOP && (
+            <span className="rounded-[4px] border border-warn/40 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">演示模式：未连接真实键盘</span>
+          )}
+          <StatusPills scanning={scanning} />
+          <button
+            type="button"
+            aria-label={dark ? "切换到浅色" : "切换到深色"}
+            onClick={() => setTheme(dark ? "light" : "dark")}
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </button>
+        </header>
+        {device ? (
+          <PageView page={page} go={go} />
         ) : (
-          device &&
-          readOnly(device) && (
-            <ReadOnlyNotice onContribute={() => setPage("contribute")} />
-          )
+          <div className="grid flex-1 place-items-center p-8 text-center">
+            <div className="max-w-sm">
+              <div className="text-[15px] font-semibold">{scanning ? "正在寻找键盘…" : "没有找到键盘"}</div>
+              <p className="mt-2 text-[13px] text-muted-foreground">
+                用数据线把 A75 接到电脑上，或插好 2.4G 接收器并按任意键唤醒键盘。先关掉原版魔咖驱动，两个软件不能同时打开。
+              </p>
+            </div>
+          </div>
         )}
-        <div className="flex-1 overflow-auto">
-          {page === "check" && (
-            <CheckPage
-              device={device}
-              onContribute={() => setPage("contribute")}
-              onRescan={doScan}
-            />
-          )}
-          {page === "lighting" && <LightingPage device={device} />}
-          {page === "paint" && <PaintPage device={device} />}
-          {page === "keymap" && (
-            <KeymapPage device={device} onContribute={() => setPage("contribute")} />
-          )}
-          {page === "switches" && <SwitchesPage device={device} />}
-          {page === "macros" && <MacrosPage device={device} />}
-          {page === "settings" && <DevicePage device={device} />}
-          {page === "contribute" && (
-            <ContributePage
-              device={device}
-              unknown={unknown}
-              onCheck={() => setPage("check")}
-            />
-          )}
-        </div>
       </main>
-      {!device && openFailed && <PermissionNotice inputMonitoring={inputMonitoring} onRefresh={doScan} />}
-      <Toaster position="bottom-right" />
+      <Toaster />
     </div>
+  );
+}
+
+function PageView({ page, go }: { page: PageId; go: (p: PageId) => void }) {
+  switch (page) {
+    case "lighting":
+      return <Lighting go={go} />;
+    case "paint":
+      return <Paint />;
+    case "music":
+      return <Music />;
+    case "screen":
+      return <Screen />;
+    case "keys":
+      return <Keys />;
+    case "macros":
+      return <Macros />;
+    case "device":
+      return <Device />;
+  }
+}
+
+function StatusPills({ scanning }: { scanning: boolean }) {
+  const { device } = useApp();
+  if (!device) return <span className="text-xs text-muted-foreground">{scanning ? "连接中…" : "未连接"}</span>;
+  const wired = device.link === "usb";
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      <span className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5">
+        <span className="size-1.5 rounded-full bg-ok" />
+        {wired ? <Cable className="size-3.5 text-muted-foreground" /> : <Radio className="size-3.5 text-muted-foreground" />}
+        {wired ? "有线" : "2.4G"}
+      </span>
+      <span className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5">
+        <Battery className="size-3.5 text-muted-foreground" />
+        <span className="tabular">{wired ? "供电中" : device.battery != null ? `${device.battery}%` : "—"}</span>
+      </span>
+    </div>
+  );
+}
+
+function DeviceCard() {
+  const { device } = useApp();
+  if (!device) return null;
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-border bg-card px-3 py-2.5">
+      <div className="text-[13px] font-medium">Monka A75</div>
+      <div className="font-mono text-[11px] text-muted-foreground">
+        固件 V{device.revision?.toString(16) ?? "?"} · ID {device.deviceId}
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <AppProvider>
+      <TooltipProvider>
+        <Shell />
+      </TooltipProvider>
+    </AppProvider>
   );
 }
