@@ -84,13 +84,18 @@ export function Keyboard({ selected = [], onKey, badges, light, showKnob = true,
             ctx.roundRect(x + w * 0.2, y + h * 0.2, w * 0.6, h * 0.45, 2 * sx);
             ctx.fill();
           } else {
-            // White board: light tints the translucent caps (multiply blend).
-            const soft = (v: number) => Math.round(255 - (255 - v) * 0.75);
-            ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
-            ctx.shadowBlur = 7 * dpr;
-            ctx.fillStyle = `rgb(${soft(r)},${soft(g)},${soft(b)})`;
+            // Light board with mixed cap colours: paint the light over the
+            // key top so every cap shows its colour the same way.
+            ctx.shadowColor = `rgba(${r},${g},${b},0.9)`;
+            ctx.shadowBlur = 8 * dpr;
+            ctx.fillStyle = `rgba(${r},${g},${b},0.72)`;
             ctx.beginPath();
-            ctx.roundRect(x - 2 * sx, y - 2 * sy, w + 4 * sx, h + 6 * sy, 4 * sx);
+            ctx.roundRect(x - 1 * sx, y - 1 * sy, w + 2 * sx, h + 3 * sy, 4 * sx);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = `rgba(255,255,255,0.18)`;
+            ctx.beginPath();
+            ctx.roundRect(x + w * 0.15, y + h * 0.12, w * 0.7, h * 0.4, 2 * sx);
             ctx.fill();
             ctx.shadowBlur = 0;
           }
@@ -119,7 +124,7 @@ export function Keyboard({ selected = [], onKey, badges, light, showKnob = true,
       <canvas
         ref={canvas}
         className="pointer-events-none absolute inset-0 h-full w-full"
-        style={{ mixBlendMode: dark ? "screen" : "multiply" }}
+        style={{ mixBlendMode: dark ? "screen" : "normal" }}
       />
       {KEYS.filter((k) => showKnob || !k.knob).map((k) => {
         const sel = selected.includes(k.slot);
