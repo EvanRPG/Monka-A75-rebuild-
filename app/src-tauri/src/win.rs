@@ -37,7 +37,7 @@ impl HookHandle {
 /// Windows virtual-key code to HID keyboard usage, for the keys the A75 has.
 pub fn vk_to_usage(vk: u32) -> Option<u8> {
     Some(match vk {
-        0x41..=0x5A => (vk - 0x41 + 4) as u8, // A..Z
+        0x41..=0x5A => (vk - 0x41 + 4) as u8,  // A..Z
         0x31..=0x39 => (vk - 0x31 + 30) as u8, // 1..9
         0x30 => 39,
         0x70..=0x7B => (vk - 0x70 + 58) as u8, // F1..F12
@@ -87,13 +87,17 @@ mod imp {
     use windows::core::PWSTR;
     use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits, ReleaseDC,
-        SelectObject, SetStretchBltMode, StretchBlt, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-        HALFTONE, SRCCOPY,
+        CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
+        ReleaseDC, SelectObject, SetStretchBltMode, StretchBlt, BITMAPINFO, BITMAPINFOHEADER,
+        BI_RGB, DIB_RGB_COLORS, HALFTONE, SRCCOPY,
     };
     use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
-    use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
-    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED};
+    use windows::Win32::Media::Audio::{
+        eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator,
+    };
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
+    };
     use windows::Win32::System::Threading::{
         GetCurrentThreadId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
         PROCESS_QUERY_LIMITED_INFORMATION,
@@ -119,7 +123,12 @@ mod imp {
             let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
             let mut buf = [0u16; 520];
             let mut len = buf.len() as u32;
-            let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len);
+            let ok = QueryFullProcessImageNameW(
+                h,
+                PROCESS_NAME_WIN32,
+                PWSTR(buf.as_mut_ptr()),
+                &mut len,
+            );
             let _ = CloseHandle(h);
             ok.ok()?;
             let path = String::from_utf16_lossy(&buf[..len as usize]);
@@ -131,7 +140,8 @@ mod imp {
         unsafe {
             // Harmless if this thread already joined COM in the same mode.
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-            let en: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+            let en: IMMDeviceEnumerator =
+                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
             let dev = en.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;
             let vol: IAudioEndpointVolume = dev.Activate(CLSCTX_ALL, None).ok()?;
             let level = vol.GetMasterVolumeLevelScalar().ok()?;
@@ -168,7 +178,15 @@ mod imp {
                 ..Default::default()
             };
             let mut px = vec![0u8; (W * H * 4) as usize];
-            let lines = GetDIBits(mem, bmp, 0, H as u32, Some(px.as_mut_ptr().cast()), &mut info, DIB_RGB_COLORS);
+            let lines = GetDIBits(
+                mem,
+                bmp,
+                0,
+                H as u32,
+                Some(px.as_mut_ptr().cast()),
+                &mut info,
+                DIB_RGB_COLORS,
+            );
             SelectObject(mem, old);
             let _ = DeleteObject(bmp.into());
             let _ = DeleteDC(mem);
@@ -235,7 +253,10 @@ mod imp {
             }
             let _ = UnhookWindowsHookEx(h);
         });
-        rx.recv().ok().flatten().map(|thread_id| HookHandle { thread_id })
+        rx.recv()
+            .ok()
+            .flatten()
+            .map(|thread_id| HookHandle { thread_id })
     }
 
     pub fn stop_hook(thread_id: u32) {

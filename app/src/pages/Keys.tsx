@@ -10,12 +10,13 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useApp } from "@/lib/store";
 import { RotateCcw, Search } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 type Layer = "base" | "fn";
 
 const macroItems = (mode: number): KeyFn[] =>
   Array.from({ length: 16 }, (_, i) => ({
-    label: `宏 ${i + 1}`,
+    label: t("宏 {0}", i + 1),
     cap: `M${i + 1}`,
     entry: [9, mode, i, 0],
   }));
@@ -32,7 +33,7 @@ export default function Keys() {
   useEffect(() => {
     Promise.all([api.readKeymap(profile), api.readFnKeymap(profile)])
       .then(([base, fn]) => setMaps({ base, fn }))
-      .catch((e) => toast.error(`读取按键失败：${e}`));
+      .catch((e) => toast.error(t("读取按键失败：{0}", e)));
   }, [profile]);
 
   const defaults = layer === "base" ? defaultMatrix() : DEFAULT_FN_MATRIX;
@@ -68,11 +69,11 @@ export default function Keys() {
       });
       toast.success(`${sel.name} → ${f.label}`);
     } catch (e) {
-      toast.error(`写入失败：${e}`);
+      toast.error(t("写入失败：{0}", e));
     }
   };
 
-  const groups = [...GROUPS.slice(0, -1), { id: "macro", name: "宏", items: macroItems(macroMode) }, GROUPS[GROUPS.length - 1]];
+  const groups = [...GROUPS.slice(0, -1), { id: "macro", name: t("宏"), items: macroItems(macroMode) }, GROUPS[GROUPS.length - 1]];
   const items = query.trim()
     ? groups.flatMap((g) => g.items).filter((f) => (f.label + (f.cap ?? "")).toLowerCase().includes(query.trim().toLowerCase()))
     : groups.find((g) => g.id === group)?.items ?? [];
@@ -86,14 +87,15 @@ export default function Keys() {
               id="keys-layer"
               value={layer}
               options={[
-                ["base", "基础层"],
-                ["fn", "Fn 层"],
+                ["base", t("基础层")],
+                ["fn", t("Fn 层")],
               ]}
               onChange={setLayer}
             />
             <span className="text-xs text-muted-foreground">
-              {layer === "base" ? "蓝色标签是改过的键" : "Fn 层：按住 Fn 再按键时的功能。空着的键跟随基础层"}
+              {layer === "base" ? t("蓝色标签是改过的键") : t("Fn 层：按住 Fn 再按键时的功能。空着的键跟随基础层")}
             </span>
+            {layer === "fn" && <span className="w-full text-xs text-warn">{t("注意：上一轮测试里 Fn 层改键写进去了但按下去没反应，正在排查。")}</span>}
           </div>
           <Keyboard selected={sel ? [sel.slot] : []} onKey={(k) => setSel(k)} badges={badges} />
         </div>
@@ -107,7 +109,7 @@ export default function Keys() {
                 id="keys-search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索功能，例如 音量、F13"
+                placeholder={t("搜索功能，例如 音量、F13")}
                 className="h-8 w-56 pl-8 text-[13px]"
               />
             </div>
@@ -133,15 +135,15 @@ export default function Keys() {
             <div className="flex min-w-0 flex-1 flex-col">
             {!query && group === "macro" && (
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
-                触发方式
+                {t("触发方式")}
                 <Segmented
                   id="macro-mode"
                   size="sm"
                   value={macroMode}
                   options={[
-                    [0, "按一下执行"],
-                    [1, "按一下开/关"],
-                    [2, "按住循环"],
+                    [0, t("按一下执行")],
+                    [1, t("按一下开/关")],
+                    [2, t("按住循环")],
                   ]}
                   onChange={setMacroMode}
                 />
@@ -166,7 +168,7 @@ export default function Keys() {
                   </button>
                 );
               })}
-              {items.length === 0 && <p className="col-span-full py-6 text-center text-[13px] text-muted-foreground">没有匹配的功能</p>}
+              {items.length === 0 && <p className="col-span-full py-6 text-center text-[13px] text-muted-foreground">{t("没有匹配的功能")}</p>}
             </div>
             </div>
           </div>
@@ -176,38 +178,38 @@ export default function Keys() {
         sel ? (
           <>
             <div className="px-5 pt-5 pb-4">
-              <div className="text-xs text-muted-foreground">{layer === "base" ? "基础层" : "Fn 层"} · 选中的键</div>
+              <div className="text-xs text-muted-foreground">{layer === "base" ? t("基础层") : t("Fn 层")} {t("· 选中的键")}</div>
               <div className="mt-1 text-lg font-semibold">{sel.name}</div>
             </div>
-            <Section title="当前功能">
+            <Section title={t("当前功能")}>
               <div className="rounded-md border border-border bg-muted px-3 py-2.5 text-[15px] font-medium">
-                {current ? describe(current, layer === "fn") : "读取中…"}
+                {current ? describe(current, layer === "fn") : t("读取中…")}
               </div>
               {current && original && !sameEntry(current, original) && (
                 <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>出厂：{describe(original, layer === "fn")}</span>
+                  <span>{t("出厂：")}{describe(original, layer === "fn")}</span>
                   <Button variant="ghost" size="xs" onClick={() => assign({ label: describe(original, layer === "fn"), entry: original })}>
                     <RotateCcw />
-                    还原
+                    {t("还原")}
                   </Button>
                 </div>
               )}
             </Section>
-            <Section title="怎么改">
+            <Section title={t("怎么改")}>
               <ol className="flex list-decimal flex-col gap-1.5 pl-4 text-[13px] text-muted-foreground">
-                <li>在键盘图上点要改的键，旋钮的左转、右转、按下也可以点。</li>
-                <li>在下方选一个新功能，点一下就写入键盘。</li>
-                <li>想恢复，点上面的「还原」。</li>
+                <li>{t("在键盘图上点要改的键，旋钮的左转、右转、按下也可以点。")}</li>
+                <li>{t("在下方选一个新功能，点一下就写入键盘。")}</li>
+                <li>{t("想恢复，点上面的「还原」。")}</li>
               </ol>
             </Section>
             {sel.slot === 59 && layer === "base" && (
-              <Section title="提醒">
-                <p className="text-xs leading-relaxed text-warn">这是 Fn 键。把它改掉以后，所有 Fn 组合键都会失效。</p>
+              <Section title={t("提醒")}>
+                <p className="text-xs leading-relaxed text-warn">{t("这是 Fn 键。把它改掉以后，所有 Fn 组合键都会失效。")}</p>
               </Section>
             )}
           </>
         ) : (
-          <div className="p-5 text-[13px] text-muted-foreground">在键盘图上点一个键开始。</div>
+          <div className="p-5 text-[13px] text-muted-foreground">{t("在键盘图上点一个键开始。")}</div>
         )
       }
     />

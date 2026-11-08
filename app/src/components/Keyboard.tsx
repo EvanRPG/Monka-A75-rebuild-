@@ -3,6 +3,7 @@ import { KEYS, PICTURE, type KeyCap } from "@/lib/a75";
 import type { Rgb } from "@/lib/effects";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { t } from "@/lib/i18n";
 
 export interface KeyboardProps {
   /** Highlighted slots. */
@@ -114,7 +115,7 @@ export function Keyboard({ selected = [], onKey, badges, light, showKnob = true,
     >
       <img
         src={dark ? PICTURE.dark : PICTURE.white}
-        alt="Monka A75 键盘"
+        alt={t("Monka A75 键盘")}
         draggable={false}
         className={cn(
           "absolute inset-0 h-full w-full transition-[filter] duration-300",

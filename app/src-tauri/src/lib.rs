@@ -3,17 +3,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 mod a75;
 mod commands;
-mod music;
-mod win;
-mod tray;
 pub mod derive;
 pub mod dev;
 pub mod hid;
+mod music;
 pub mod ops;
 mod permissions;
 pub mod protocol;
 pub mod registry;
 pub mod session;
+mod tray;
+mod win;
 pub mod wire;
 
 use commands::AppState;

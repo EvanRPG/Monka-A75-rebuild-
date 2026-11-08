@@ -36,7 +36,7 @@ export function setLang(l: Lang) {
 }
 
 /** Translate a Chinese source string. `{0}`, `{1}` take the arguments. */
-export function t(zh: string, ...args: (string | number)[]): string {
+export function t(zh: string, ...args: unknown[]): string {
   const s = LANG === "en" ? (EN[zh] ?? zh) : zh;
   return args.length ? s.replace(/\{(\d+)\}/g, (m, i) => (args[Number(i)] !== undefined ? String(args[Number(i)]) : m)) : s;
 }

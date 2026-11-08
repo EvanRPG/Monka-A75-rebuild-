@@ -9,6 +9,7 @@ import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { PageId } from "@/App";
+import { t } from "@/lib/i18n";
 
 /** A tiny animated hint of each effect on its tile. */
 function tileGradient(e: Effect): string {
@@ -55,7 +56,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
     setDraft(p);
     if (timer.current) clearTimeout(timer.current);
     if (when === "preview") return;
-    const go = () => setLed(p).catch((e) => toast.error(`写入失败：${e}`));
+    const go = () => setLed(p).catch((e) => toast.error(t("写入失败：{0}", e)));
     if (when === "now") go();
     else timer.current = setTimeout(go, 600);
   };
@@ -95,8 +96,8 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
         <div className="flex flex-col gap-5">
           <div>
             <div className="mb-2.5 flex items-center gap-2">
-              <h3 className="text-[13px] font-semibold">板载灯效</h3>
-              <span className="text-xs text-muted-foreground">由键盘自己运行，拔掉线也保留</span>
+              <h3 className="text-[13px] font-semibold">{t("板载灯效")}</h3>
+              <span className="text-xs text-muted-foreground">{t("由键盘自己运行，拔掉线也保留")}</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
               {onboard.map((e) => (
@@ -106,8 +107,8 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
           </div>
           <div>
             <div className="mb-2.5 flex items-center gap-2">
-              <h3 className="text-[13px] font-semibold">需要电脑配合</h3>
-              <span className="text-xs text-muted-foreground">由本软件实时计算后发给键盘</span>
+              <h3 className="text-[13px] font-semibold">{t("需要电脑配合")}</h3>
+              <span className="text-xs text-muted-foreground">{t("由本软件实时计算后发给键盘")}</span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
               {hosted.map((e) => (
@@ -120,38 +121,38 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
       panel={
         <>
           <div className="px-5 pt-5 pb-4">
-            <div className="text-xs text-muted-foreground">当前灯效</div>
+            <div className="text-xs text-muted-foreground">{t("当前灯效")}</div>
             <div className="mt-1 flex items-center gap-2">
-              <span className="text-lg font-semibold">{effect?.name ?? `模式 ${draft.mode}`}</span>
-              <Tag tone={led && JSON.stringify(led) === JSON.stringify(draft) ? "ok" : "muted"}>{led && JSON.stringify(led) === JSON.stringify(draft) ? "已写入键盘" : "未写入"}</Tag>
+              <span className="text-lg font-semibold">{effect?.name ?? t("模式 {0}", draft.mode)}</span>
+              <Tag tone={led && JSON.stringify(led) === JSON.stringify(draft) ? "ok" : "muted"}>{led && JSON.stringify(led) === JSON.stringify(draft) ? t("已写入键盘") : t("未写入")}</Tag>
             </div>
           </div>
-          <Section title="参数">
+          <Section title={t("参数")}>
             <SliderRow
               id="led-brightness"
-              label="亮度"
+              label={t("亮度")}
               value={draft.brightness}
               min={0}
               max={BRIGHTNESS_MAX}
               onChange={(v) => apply({ ...draft, brightness: v }, "preview")}
               onCommit={(v) => apply({ ...draft, brightness: v })}
-              format={(v) => (v === 0 ? "关闭" : `${v} / ${BRIGHTNESS_MAX}`)}
+              format={(v) => (v === 0 ? t("关闭") : `${v} / ${BRIGHTNESS_MAX}`)}
             />
             {effect?.speed && (
               <SliderRow
                 id="led-speed"
-                label="速度"
+                label={t("速度")}
                 value={draft.speed}
                 min={0}
                 max={SPEED_MAX}
                 onChange={(v) => apply({ ...draft, speed: v }, "preview")}
                 onCommit={(v) => apply({ ...draft, speed: v })}
-                format={(v) => ["最慢", "慢", "中", "快", "最快"][v]}
+                format={(v) => [t("最慢"), t("慢"), t("中"), t("快"), t("最快")][v]}
               />
             )}
           </Section>
           {effect?.options && (
-            <Section title="方向">
+            <Section title={t("方向")}>
               <Segmented
                 id="led-direction"
                 className="w-full"
@@ -161,7 +162,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
               />
             </Section>
           )}
-          <Section title="颜色">
+          <Section title={t("颜色")}>
             {effect?.rgb ? (
               <>
                 <Segmented
@@ -169,8 +170,8 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
                   className="w-full"
                   value={draft.dazzle ? "rainbow" : "single"}
                   options={[
-                    ["single", "单色"],
-                    ["rainbow", "七彩"],
+                    ["single", t("单色")],
+                    ["rainbow", t("七彩")],
                   ]}
                   onChange={(v) => apply({ ...draft, dazzle: v === "rainbow" })}
                 />
@@ -183,17 +184,17 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
                 )}
               </>
             ) : (
-              <p className="text-[13px] text-muted-foreground">这个灯效固定为七彩，不能选颜色。</p>
+              <p className="text-[13px] text-muted-foreground">{t("这个灯效固定为七彩，不能选颜色。")}</p>
             )}
           </Section>
           {REACTIVE.has(draft.mode) && (
-            <Section title="按键触发">
-              <p className="text-xs leading-relaxed text-muted-foreground">这个灯效跟着按键走。在这里敲键盘或点左边图上的键，预览会跟着变；不按时预览自己随机演示。</p>
+            <Section title={t("按键触发")}>
+              <p className="text-xs leading-relaxed text-muted-foreground">{t("这个灯效跟着按键走。在这里敲键盘或点左边图上的键，预览会跟着变；不按时预览自己随机演示。")}</p>
             </Section>
           )}
-          <Section title="说明">
+          <Section title={t("说明")}>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              点选立即写入键盘，滑块松手后写入。左侧预览是示意，实际效果以键盘为准。Fn 键的灯用来显示充电和配对状态，不跟随灯效。
+              {t("点选立即写入键盘，滑块松手后写入。左侧预览是示意，实际效果以键盘为准。Fn 键的灯用来显示充电和配对状态，不跟随灯效。")}
             </p>
           </Section>
         </>

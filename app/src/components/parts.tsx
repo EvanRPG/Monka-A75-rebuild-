@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
+import { t } from "@/lib/i18n";
 
 export function Toaster() {
   const { theme } = useApp();
@@ -171,7 +172,7 @@ export function ColorSwatches({
           <button
             key={h}
             type="button"
-            aria-label={`颜色 ${h}`}
+            aria-label={t("颜色 {0}", h)}
             onClick={() => onChange(c)}
             className={cn(
               "size-7 rounded-full ring-offset-2 ring-offset-card transition-shadow outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -190,7 +191,7 @@ export function ColorSwatches({
         style={{
           background: !isPreset ? hex : "conic-gradient(#ff3b30,#ffd60a,#34c759,#00c7be,#4d8dff,#bf5af2,#ff3b30)",
         }}
-        title="自定义颜色"
+        title={t("自定义颜色")}
       >
         <input
           id={id}

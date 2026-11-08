@@ -118,8 +118,12 @@ impl Analyzer {
             let f1 = LOW_HZ * (high / LOW_HZ).powf((i + 1) as f32 / BANDS as f32);
             // Low bands are narrower than a bin: give each at least one bin
             // of its own, moving upward, so no two bands mirror each other.
-            let start = ((f0 / hz_per_bin).floor() as usize).max(prev_end).min(FFT_N / 2 - 1);
-            let end = ((f1 / hz_per_bin).ceil() as usize).max(start + 1).min(FFT_N / 2);
+            let start = ((f0 / hz_per_bin).floor() as usize)
+                .max(prev_end)
+                .min(FFT_N / 2 - 1);
+            let end = ((f1 / hz_per_bin).ceil() as usize)
+                .max(start + 1)
+                .min(FFT_N / 2);
             bands.push((start, end));
             prev_end = end;
         }
@@ -129,7 +133,14 @@ impl Analyzer {
                 0.42 - 0.5 * x.cos() + 0.08 * (2.0 * x).cos()
             })
             .collect();
-        Self { fft, window, bands, held: [0.0; BANDS], blackman, smooth: vec![0.0; FFT_N / 2] }
+        Self {
+            fft,
+            window,
+            bands,
+            held: [0.0; BANDS],
+            blackman,
+            smooth: vec![0.0; FFT_N / 2],
+        }
     }
 
     /// Levels for the newest `FFT_N` samples (mono, -1..1). Fewer samples
@@ -158,14 +169,22 @@ impl Analyzer {
 
         let mut raw = [0f32; BANDS];
         for (i, &(a, b)) in self.bands.iter().enumerate() {
-            let peak = buf[a..b].iter().map(|c| c.norm() * scale).fold(0.0f32, f32::max);
-            let tilt = 1.0 + p.bass.clamp(0.0, 100.0) / 100.0 * 1.5 * (1.0 - i as f32 / (BANDS - 1) as f32);
+            let peak = buf[a..b]
+                .iter()
+                .map(|c| c.norm() * scale)
+                .fold(0.0f32, f32::max);
+            let tilt = 1.0
+                + p.bass.clamp(0.0, 100.0) / 100.0 * 1.5 * (1.0 - i as f32 / (BANDS - 1) as f32);
             // Higher bands carry less energy in music; a gentle lift keeps
             // the right side of the board alive.
             let lift = 1.0 + 1.2 * i as f32 / (BANDS - 1) as f32;
             let db = 20.0 * (peak * tilt * lift + 1e-9).log10();
             let norm = ((db - floor_db) / (top_db - floor_db)).clamp(0.0, 1.0);
-            raw[i] = if norm < gate { 0.0 } else { norm * LEVEL_MAX as f32 };
+            raw[i] = if norm < gate {
+                0.0
+            } else {
+                norm * LEVEL_MAX as f32
+            };
         }
         self.finish(raw, p)
     }
@@ -265,7 +284,11 @@ pub fn boost_color([r, g, b]: [u8; 3], boost: f32) -> [u8; 3] {
     let sat = 1.0 + 2.0 * k;
     let lift = 1.0 / max.max(0.2) * k + (1.0 - k);
     let f = |c: f32| (((c - grey) * sat + grey) * lift).clamp(0.0, 1.0);
-    [(f(r) * 255.0) as u8, (f(g) * 255.0) as u8, (f(b) * 255.0) as u8]
+    [
+        (f(r) * 255.0) as u8,
+        (f(g) * 255.0) as u8,
+        (f(b) * 255.0) as u8,
+    ]
 }
 
 /// Recent mono samples from the capture callback.
@@ -300,9 +323,7 @@ pub mod capture {
 
     pub fn start(ring: Ring) -> Result<Capture, String> {
         let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or("没有找到默认播放设备")?;
+        let device = host.default_output_device().ok_or("没有找到默认播放设备")?;
         let source = device.name().unwrap_or_else(|_| "默认播放设备".into());
         let config = device.default_output_config().map_err(|e| e.to_string())?;
         let channels = config.channels() as usize;
@@ -313,7 +334,12 @@ pub mod capture {
                 let ring = ring.clone();
                 device.build_input_stream(
                     &config.into(),
-                    move |d: &[f32], _| ring.push(d.chunks(channels).map(|f| f.iter().sum::<f32>() / channels as f32)),
+                    move |d: &[f32], _| {
+                        ring.push(
+                            d.chunks(channels)
+                                .map(|f| f.iter().sum::<f32>() / channels as f32),
+                        )
+                    },
                     err,
                     None,
                 )
@@ -323,7 +349,9 @@ pub mod capture {
                 device.build_input_stream(
                     &config.into(),
                     move |d: &[i16], _| {
-                        ring.push(d.chunks(channels).map(|f| f.iter().map(|&s| s as f32 / 32768.0).sum::<f32>() / channels as f32))
+                        ring.push(d.chunks(channels).map(|f| {
+                            f.iter().map(|&s| s as f32 / 32768.0).sum::<f32>() / channels as f32
+                        }))
                     },
                     err,
                     None,
@@ -334,7 +362,10 @@ pub mod capture {
                 device.build_input_stream(
                     &config.into(),
                     move |d: &[i32], _| {
-                        ring.push(d.chunks(channels).map(|f| f.iter().map(|&s| s as f32 / 2147483648.0).sum::<f32>() / channels as f32))
+                        ring.push(d.chunks(channels).map(|f| {
+                            f.iter().map(|&s| s as f32 / 2147483648.0).sum::<f32>()
+                                / channels as f32
+                        }))
                     },
                     err,
                     None,
@@ -344,7 +375,11 @@ pub mod capture {
         }
         .map_err(|e| e.to_string())?;
         stream.play().map_err(|e| e.to_string())?;
-        Ok(Capture { _stream: stream, sample_rate, source })
+        Ok(Capture {
+            _stream: stream,
+            sample_rate,
+            source,
+        })
     }
 }
 
@@ -374,8 +409,13 @@ mod tests {
     #[test]
     fn a_bass_tone_lights_the_low_bands_only() {
         let mut a = Analyzer::new(48_000);
-        let tone: Vec<f32> = (0..FFT_N).map(|i| 0.5 * (2.0 * std::f32::consts::PI * 80.0 * i as f32 / 48_000.0).sin()).collect();
-        let p = MusicParams { spread: 0.0, ..Default::default() };
+        let tone: Vec<f32> = (0..FFT_N)
+            .map(|i| 0.5 * (2.0 * std::f32::consts::PI * 80.0 * i as f32 / 48_000.0).sin())
+            .collect();
+        let p = MusicParams {
+            spread: 0.0,
+            ..Default::default()
+        };
         let lv = a.levels(&tone, &p);
         assert!(lv[..8].iter().any(|&l| l >= 4), "{lv:?}");
         assert!(lv[20..].iter().all(|&l| l <= 1), "{lv:?}");
@@ -384,10 +424,17 @@ mod tests {
     #[test]
     fn vendor_path_tops_out_at_six_and_is_dark_in_silence() {
         let mut a = Analyzer::new(48_000);
-        let p = MusicParams { algo: 1, spread: 0.0, decay: 0.0, ..Default::default() };
+        let p = MusicParams {
+            algo: 1,
+            spread: 0.0,
+            decay: 0.0,
+            ..Default::default()
+        };
         assert!(a.levels(&vec![0.0; FFT_N], &p).iter().all(|&l| l == 0));
         // 1 kHz sits in bins 27..59 at 48 kHz (bin 42 or so).
-        let tone: Vec<f32> = (0..FFT_N).map(|i| 0.3 * (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / 48_000.0).sin()).collect();
+        let tone: Vec<f32> = (0..FFT_N)
+            .map(|i| 0.3 * (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / 48_000.0).sin())
+            .collect();
         let mut a = Analyzer::new(48_000);
         let lv = a.levels(&tone, &p);
         assert_eq!(lv.iter().copied().max(), Some(6), "{lv:?}");

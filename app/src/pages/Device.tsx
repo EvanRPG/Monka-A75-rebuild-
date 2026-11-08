@@ -7,6 +7,7 @@ import { api, type DeviceSettings, type ReportRate } from "@/lib/backend";
 import { useApp } from "@/lib/store";
 import { toast } from "sonner";
 import { BatteryCharging, Cable, Cpu, Download, Radio, RotateCcw, Upload } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 function Card({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
@@ -33,20 +34,20 @@ function Row({ label, hint, children, htmlFor }: { label: string; hint?: string;
 }
 
 const SLEEP_OPTIONS: [number, string][] = [
-  [60, "1 分钟"],
-  [180, "3 分钟"],
-  [300, "5 分钟"],
-  [600, "10 分钟"],
-  [1800, "30 分钟"],
-  [3600, "1 小时"],
-  [0, "从不"],
+  [60, t("1 分钟")],
+  [180, t("3 分钟")],
+  [300, t("5 分钟")],
+  [600, t("10 分钟")],
+  [1800, t("30 分钟")],
+  [3600, t("1 小时")],
+  [0, t("从不")],
 ];
 
 function sleepLabel(v: number) {
-  if (v === 0) return "从不";
-  if (v % 3600 === 0) return `${v / 3600} 小时`;
-  if (v % 60 === 0) return `${v / 60} 分钟`;
-  return `${v} 秒`;
+  if (v === 0) return t("从不");
+  if (v % 3600 === 0) return t("{0} 小时", v / 3600);
+  if (v % 60 === 0) return t("{0} 分钟", v / 60);
+  return t("{0} 秒", v);
 }
 
 function SleepSelect({ id, value, onChange }: { id: string; value: number; onChange: (v: number) => void }) {
@@ -78,9 +79,9 @@ export default function Device() {
     setBackupBusy(true);
     try {
       const r = kind === "export" ? await api.exportConfig() : await api.importConfig();
-      if (r !== null) toast.success(kind === "export" ? "已备份到文件" : "已从文件恢复，键盘设置已更新");
+      if (r !== null) toast.success(kind === "export" ? t("已备份到文件") : t("已从文件恢复，键盘设置已更新"));
     } catch (e) {
-      toast.error(`${kind === "export" ? "备份" : "恢复"}失败：${e}`);
+      toast.error(kind === "export" ? t("备份失败：{0}", e) : t("恢复失败：{0}", e));
     } finally {
       setBackupBusy(false);
     }
@@ -92,7 +93,7 @@ export default function Device() {
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
-    api.getSettings().then(setS).catch((e) => toast.error(`读取设置失败：${e}`));
+    api.getSettings().then(setS).catch((e) => toast.error(t("读取设置失败：{0}", e)));
     if (!experimental) return;
     api
       .getReportRate()
@@ -108,10 +109,10 @@ export default function Device() {
     try {
       const back = await api.setReportRate(r);
       setReadBack(back);
-      if (back === r) toast.success(`回报率已设为 ${r} Hz，回读一致`);
-      else toast.error(`键盘回读为 ${back ?? "无应答"}，设置可能没生效`);
+      if (back === r) toast.success(t("回报率已设为 {0} Hz，回读一致", r));
+      else toast.error(t("键盘回读为 {0}，设置可能没生效", back ?? t("无应答")));
     } catch (e) {
-      toast.error(`写入失败：${e}`);
+      toast.error(t("写入失败：{0}", e));
     }
   };
 
@@ -119,10 +120,10 @@ export default function Device() {
     setResetting(true);
     try {
       await api.factoryReset();
-      toast.success("已恢复出厂设置");
+      toast.success(t("已恢复出厂设置"));
       setConfirmReset(false);
     } catch (e) {
-      toast.error(`恢复失败：${e}`);
+      toast.error(t("恢复失败：{0}", e));
     } finally {
       setResetting(false);
     }
@@ -133,23 +134,23 @@ export default function Device() {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card title="设备信息">
+        <Card title={t("设备信息")}>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-[13px]">
-            <Info icon={<Cpu className="size-4" />} k="型号" v="魔咖 Monka A75 三模" />
-            <Info icon={wired ? <Cable className="size-4" /> : <Radio className="size-4" />} k="连接方式" v={wired ? "有线 USB" : "2.4G 接收器"} />
+            <Info icon={<Cpu className="size-4" />} k={t("型号")} v={t("魔咖 Monka A75 三模")} />
+            <Info icon={wired ? <Cable className="size-4" /> : <Radio className="size-4" />} k={t("连接方式")} v={wired ? t("有线 USB") : t("2.4G 接收器")} />
             <Info
               icon={<BatteryCharging className="size-4" />}
-              k="电量"
-              v={wired ? "有线供电中" : device?.battery != null ? `${device.battery}%` : "未知"}
+              k={t("电量")}
+              v={wired ? t("有线供电中") : device?.battery != null ? `${device.battery}%` : t("未知")}
             />
-            <Info k="固件版本" v={device?.revision != null ? `V${device.revision.toString(16)}` : "未知"} mono />
-            <Info k="设备编号" v={String(device?.deviceId ?? "—")} mono />
-            <Info k="方案代号" v="s75 · yc500 族" mono />
+            <Info k={t("固件版本")} v={device?.revision != null ? `V${device.revision.toString(16)}` : t("未知")} mono />
+            <Info k={t("设备编号")} v={String(device?.deviceId ?? "—")} mono />
+            <Info k={t("方案代号")} v={t("s75 · yc500 族")} mono />
           </dl>
-          {wired && <Callout>电量只能在 2.4G 下读到：键盘本身不报电量，是接收器转报的。插线时看 Fn 键的灯：蓝灯闪烁表示正在充电，绿灯常亮表示已充满。</Callout>}
+          {wired && <Callout>{t("电量只能在 2.4G 下读到：键盘本身不报电量，是接收器转报的。插线时看 Fn 键的灯：蓝灯闪烁表示正在充电，绿灯常亮表示已充满。")}</Callout>}
         </Card>
 
-        {experimental && <Card title="回报率" aside={<Tag tone={readBack ? "warn" : "muted"}>{readBack ? "待验证" : "不可用"}</Tag>}>
+        {experimental && <Card title={t("回报率")} aside={<Tag tone={readBack ? "warn" : "muted"}>{readBack ? t("待验证") : t("不可用")}</Tag>}>
           <Segmented
             id="report-rate"
             className={readBack ? "w-full" : "pointer-events-none w-full opacity-50"}
@@ -158,119 +159,119 @@ export default function Device() {
             onChange={changeRate}
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>键盘回读</span>
-            <span className="tabular font-mono">{readBack ? `${readBack} Hz` : "无应答"}</span>
+            <span>{t("键盘回读")}</span>
+            <span className="tabular font-mono">{readBack ? `${readBack} Hz` : t("无应答")}</span>
           </div>
           <Callout tone="warn">
             {readBack
-              ? "原版驱动里有这项设置，但还没确认 A75 的固件会照做。回读一致只说明键盘记住了数值，实际速率要用回报率测试网页再测一次。"
-              : "键盘没有正常回应回报率查询。为了安全，这项设置不开放。"}
+              ? t("原版驱动里有这项设置，但还没确认 A75 的固件会照做。回读一致只说明键盘记住了数值，实际速率要用回报率测试网页再测一次。")
+              : t("键盘没有正常回应回报率查询。为了安全，这项设置不开放。")}
           </Callout>
         </Card>}
 
-        <Card title="按键">
+        <Card title={t("按键")}>
           {s ? (
             <>
               <SliderRow
                 id="debounce"
-                label="防抖时间"
+                label={t("防抖时间")}
                 value={s.debounce}
                 min={1}
                 max={10}
                 onChange={(v) => setS({ ...s, debounce: v })}
-                onCommit={(v) => api.setDebounce(v).then(() => toast.success(`防抖已设为 ${v} ms`)).catch((e) => toast.error(`写入失败：${e}`))}
+                onCommit={(v) => api.setDebounce(v).then(() => toast.success(t("防抖已设为 {0} ms", v))).catch((e) => toast.error(t("写入失败：{0}", e)))}
                 format={(v) => `${v} ms`}
-                hint="出现连击（按一次出两个字）时调大一点；越小反应越快。"
+                hint={t("出现连击（按一次出两个字）时调大一点；越小反应越快。")}
               />
               {s.options && (
                 <>
-                  <Row label="锁定 Win 键" hint="打游戏时防止误按弹出开始菜单" htmlFor="opt-winlock">
+                  <Row label={t("锁定 Win 键")} hint={t("打游戏时防止误按弹出开始菜单")} htmlFor="opt-winlock">
                     <Switch id="opt-winlock" checked={s.options.winLock} onCheckedChange={(v) => { const o = { ...s.options!, winLock: v }; setS({ ...s, options: o }); api.setOptions(o); }} />
                   </Row>
-                  <Row label="WASD 与方向键互换" htmlFor="opt-wasd">
+                  <Row label={t("WASD 与方向键互换")} htmlFor="opt-wasd">
                     <Switch id="opt-wasd" checked={s.options.wasdSwap} onCheckedChange={(v) => { const o = { ...s.options!, wasdSwap: v }; setS({ ...s, options: o }); api.setOptions(o); }} />
                   </Row>
                 </>
               )}
             </>
           ) : (
-            <p className="text-[13px] text-muted-foreground">读取中…</p>
+            <p className="text-[13px] text-muted-foreground">{t("读取中…")}</p>
           )}
         </Card>
 
-        <Card title="无线休眠">
+        <Card title={t("无线休眠")}>
           {s ? (
             <>
-              <Row label="2.4G 无操作后休眠" htmlFor="sleep-24">
+              <Row label={t("2.4G 无操作后休眠")} htmlFor="sleep-24">
                 <SleepSelect id="sleep-24" value={s.sleep.sleep24} onChange={(v) => { const sl = { ...s.sleep, sleep24: v }; setS({ ...s, sleep: sl }); api.setSleep(sl); }} />
               </Row>
-              <Row label="蓝牙无操作后休眠" htmlFor="sleep-bt">
+              <Row label={t("蓝牙无操作后休眠")} htmlFor="sleep-bt">
                 <SleepSelect id="sleep-bt" value={s.sleep.sleepBt} onChange={(v) => { const sl = { ...s.sleep, sleepBt: v }; setS({ ...s, sleep: sl }); api.setSleep(sl); }} />
               </Row>
-              <Row label="深度休眠" hint="更省电，唤醒稍慢" htmlFor="sleep-deep">
+              <Row label={t("深度休眠")} hint={t("更省电，唤醒稍慢")} htmlFor="sleep-deep">
                 <SleepSelect id="sleep-deep" value={s.sleep.deep24} onChange={(v) => { const sl = { ...s.sleep, deep24: v, deepBt: v }; setS({ ...s, sleep: sl }); api.setSleep(sl); }} />
               </Row>
             </>
           ) : (
-            <p className="text-[13px] text-muted-foreground">读取中…</p>
+            <p className="text-[13px] text-muted-foreground">{t("读取中…")}</p>
           )}
         </Card>
 
-        {experimental && <Card title="备份与恢复">
+        {experimental && <Card title={t("备份与恢复")}>
           <p className="text-[13px] leading-relaxed text-muted-foreground">
-            把改键、Fn 层、灯效、防抖和休眠设置存成一个文件。换电脑、恢复出厂之后，一键还原。只备份配置 1，宏和逐键图案不在备份里。
+            {t("把改键、Fn 层、灯效、防抖和休眠设置存成一个文件。换电脑、恢复出厂之后，一键还原。只备份配置 1，宏和逐键图案不在备份里。")}
           </p>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" disabled={backupBusy} onClick={() => backup("export")}>
               <Download />
-              备份到文件
+              {t("备份到文件")}
             </Button>
             <Button variant="outline" size="sm" disabled={backupBusy} onClick={() => backup("import")}>
               <Upload />
-              从文件恢复
+              {t("从文件恢复")}
             </Button>
           </div>
         </Card>}
 
-        <Card title="配置档" aside={<Tag tone="warn">待验证</Tag>}>
+        <Card title={t("配置档")} aside={<Tag tone="warn">{t("待验证")}</Tag>}>
           <Segmented
             id="profile"
             className="w-full"
             value={switching ?? profile}
-            options={[0, 1, 2].map((i) => [i, `配置 ${i + 1}`] as [number, string])}
+            options={[0, 1, 2].map((i) => [i, t("配置 {0}", i + 1)] as [number, string])}
             onChange={async (v) => {
               setSwitching(v);
               try {
                 await setProfile(v);
-                toast.success(`已切换到配置 ${v + 1}`);
+                toast.success(t("已切换到配置 {0}", v + 1));
               } catch (e) {
-                toast.error(`键盘没有接受：${e}`);
+                toast.error(t("键盘没有接受：{0}", e));
               } finally {
                 setSwitching(null);
               }
             }}
           />
           <Callout tone="warn">
-            原版驱动的设备表写着 3 层，但还没确认 A75 真的能存 3 套。切换后键盘会回读确认，没切过去会提示。如果真有多套，按键页和旋钮页改的是当前这一套。
+            {t("原版驱动的设备表写着 3 层，但还没确认 A75 真的能存 3 套。切换后键盘会回读确认，没切过去会提示。如果真有多套，按键页和旋钮页改的是当前这一套。")}
           </Callout>
         </Card>
 
-        <Card title="恢复出厂设置">
+        <Card title={t("恢复出厂设置")}>
           <p className="text-[13px] leading-relaxed text-muted-foreground">
-            清除改键、宏、逐键图案和灯效，回到出厂状态。需要插线，约 4 秒。
+            {t("清除改键、宏、逐键图案和灯效，回到出厂状态。需要插线，约 4 秒。")}
           </p>
           {confirmReset ? (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-auto text-[13px] text-destructive">确定要清除全部设置吗？</span>
-              <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)}>取消</Button>
+              <span className="mr-auto text-[13px] text-destructive">{t("确定要清除全部设置吗？")}</span>
+              <Button variant="ghost" size="sm" onClick={() => setConfirmReset(false)}>{t("取消")}</Button>
               <Button variant="destructive" size="sm" disabled={resetting || !wired} onClick={reset}>
-                {resetting ? "正在恢复…" : "确定恢复"}
+                {resetting ? t("正在恢复…") : t("确定恢复")}
               </Button>
             </div>
           ) : (
             <Button variant="outline" size="sm" className="self-start" disabled={!wired} onClick={() => setConfirmReset(true)}>
               <RotateCcw />
-              恢复出厂设置
+              {t("恢复出厂设置")}
             </Button>
           )}
         </Card>

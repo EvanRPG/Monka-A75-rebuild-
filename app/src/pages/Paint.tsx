@@ -6,6 +6,7 @@ import { LIT_KEYS, PICTURE, type KeyCap } from "@/lib/a75";
 import { api } from "@/lib/backend";
 import { toast } from "sonner";
 import { Brush, Pipette, PaintBucket, Upload } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 type Rgb = [number, number, number];
 type Tool = "brush" | "pick" | "fill";
@@ -23,7 +24,7 @@ const hsv = (h: number): Rgb => {
 const TEMPLATES: { id: string; name: string; make: () => Rgb[] }[] = [
   {
     id: "rainbow",
-    name: "横向彩虹",
+    name: t("横向彩虹"),
     make: () => {
       const c = blank();
       LIT_KEYS.forEach((k) => (c[k.slot] = hsv((k.x + k.w / 2) / PICTURE.w)));
@@ -32,7 +33,7 @@ const TEMPLATES: { id: string; name: string; make: () => Rgb[] }[] = [
   },
   {
     id: "gaming",
-    name: "游戏高亮",
+    name: t("游戏高亮"),
     make: () => {
       const c = blank();
       LIT_KEYS.forEach((k) => (c[k.slot] = [30, 40, 60]));
@@ -44,7 +45,7 @@ const TEMPLATES: { id: string; name: string; make: () => Rgb[] }[] = [
   },
   {
     id: "rows",
-    name: "分行渐变",
+    name: t("分行渐变"),
     make: () => {
       const c = blank();
       LIT_KEYS.forEach((k) => {
@@ -56,7 +57,7 @@ const TEMPLATES: { id: string; name: string; make: () => Rgb[] }[] = [
   },
   {
     id: "white",
-    name: "全部白色",
+    name: t("全部白色"),
     make: () => {
       const c = blank();
       LIT_KEYS.forEach((k) => (c[k.slot] = [255, 255, 255]));
@@ -102,9 +103,9 @@ export default function Paint() {
     try {
       await api.writePerKey(colors.flat(), true);
       setDirty(false);
-      toast.success(`已写入图案 ${slot + 1}，键盘已切到逐键自定义`);
+      toast.success(t("已写入图案 {0}，键盘已切到逐键自定义", slot + 1));
     } catch (e) {
-      toast.error(`写入失败：${e}`);
+      toast.error(t("写入失败：{0}", e));
     } finally {
       setWriting(false);
     }
@@ -116,8 +117,8 @@ export default function Paint() {
       below={
         <div>
           <div className="mb-2.5 flex items-center gap-2">
-            <h3 className="text-[13px] font-semibold">模板</h3>
-            <span className="text-xs text-muted-foreground">点一下套用，再用画笔细调</span>
+            <h3 className="text-[13px] font-semibold">{t("模板")}</h3>
+            <span className="text-xs text-muted-foreground">{t("点一下套用，再用画笔细调")}</span>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {TEMPLATES.map((t) => (
@@ -139,46 +140,46 @@ export default function Paint() {
       }
       panel={
         <>
-          <Section title="图案槽位">
+          <Section title={t("图案槽位")}>
             <Segmented
               id="paint-slot"
               className="w-full"
               value={slot}
-              options={[0, 1, 2].map((i) => [i, `图案 ${i + 1}`] as [number, string])}
+              options={[0, 1, 2].map((i) => [i, t("图案 {0}", i + 1)] as [number, string])}
               onChange={setSlot}
             />
-            <p className="text-xs leading-relaxed text-muted-foreground">原版驱动为这把键盘列出 3 个图案槽位。</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">{t("原版驱动为这把键盘列出 3 个图案槽位。")}</p>
           </Section>
-          <Section title="工具">
+          <Section title={t("工具")}>
             <Segmented
               id="paint-tool"
               className="w-full"
               value={tool}
               options={[
-                ["brush", <span className="flex items-center justify-center gap-1.5"><Brush className="size-3.5" />画笔</span>],
-                ["pick", <span className="flex items-center justify-center gap-1.5"><Pipette className="size-3.5" />取色</span>],
-                ["fill", <span className="flex items-center justify-center gap-1.5"><PaintBucket className="size-3.5" />全部</span>],
+                ["brush", <span className="flex items-center justify-center gap-1.5"><Brush className="size-3.5" />{t("画笔")}</span>],
+                ["pick", <span className="flex items-center justify-center gap-1.5"><Pipette className="size-3.5" />{t("取色")}</span>],
+                ["fill", <span className="flex items-center justify-center gap-1.5"><PaintBucket className="size-3.5" />{t("全部")}</span>],
               ]}
               onChange={setTool}
             />
             <p className="text-xs text-muted-foreground">
-              {tool === "brush" && "按住鼠标在键盘上拖动，可以连续涂色。"}
-              {tool === "pick" && "点一个键，取它的颜色作为画笔颜色。"}
-              {tool === "fill" && "点任意一个键，把所有键涂成画笔颜色。"}
+              {tool === "brush" && t("按住鼠标在键盘上拖动，可以连续涂色。")}
+              {tool === "pick" && t("点一个键，取它的颜色作为画笔颜色。")}
+              {tool === "fill" && t("点任意一个键，把所有键涂成画笔颜色。")}
             </p>
           </Section>
-          <Section title="画笔颜色">
+          <Section title={t("画笔颜色")}>
             <ColorSwatches id="paint-color" value={brush} onChange={setBrush} />
             <Button variant="outline" size="sm" onClick={() => { setBrush([0, 0, 0]); setTool("brush"); }}>
-              橡皮擦（熄灭按键）
+              {t("橡皮擦（熄灭按键）")}
             </Button>
           </Section>
-          <Section title="写入">
+          <Section title={t("写入")}>
             <Button onClick={write} disabled={writing || !dirty} className="w-full">
               <Upload />
-              {writing ? "正在写入…" : dirty ? `写入图案 ${slot + 1}` : "已写入"}
+              {writing ? t("正在写入…") : dirty ? t("写入图案 {0}", slot + 1) : t("已写入")}
             </Button>
-            <Callout>图案会存进键盘，所以不会边画边写。画好后点一次写入即可，连续写入之间软件会自动留出间隔。</Callout>
+            <Callout>{t("图案会存进键盘，所以不会边画边写。画好后点一次写入即可，连续写入之间软件会自动留出间隔。")}</Callout>
           </Section>
         </>
       }

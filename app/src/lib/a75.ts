@@ -7,6 +7,7 @@ import matrixRaw from "./a75-matrix.json";
 import fnMatrixRaw from "./a75-fnmatrix.json";
 import darkUrl from "@/assets/a75-dark.png";
 import whiteUrl from "@/assets/a75-white.png";
+import { t } from "@/lib/i18n";
 
 /** Both pictures share the vendor's 871x288 frame and key coordinates. */
 export const PICTURE = { dark: darkUrl, white: whiteUrl, w: 871, h: 288 };
@@ -55,8 +56,8 @@ const NAME_FIX: Record<string, string> = {
   r_Shift: "Shift",
   r_Ctrl: "Ctrl",
   fn: "Fn",
-  "U-": "旋钮左转",
-  "U+": "旋钮右转",
+  "U-": t("旋钮左转"),
+  "U+": t("旋钮右转"),
 };
 
 interface RawKey {
@@ -80,7 +81,7 @@ export const KEYS: KeyCap[] = [
     knob: k.knob,
   })),
   // Knob press: matrix slot 84, not in the vendor's picture table.
-  { slot: 84, name: "旋钮按下", x: 735, y: 18, w: 18, h: 33, knob: true },
+  { slot: 84, name: t("旋钮按下"), x: 735, y: 18, w: 18, h: 33, knob: true },
 ];
 
 /** Slots that are physical keys with a cap (lighting covers these). */
@@ -104,27 +105,27 @@ export interface Effect {
 // Order and names follow the vendor's Monka table; mode bytes are verified
 // against captures (1, 2, 22) and the vendor code (13, 20, 21).
 export const EFFECTS: Effect[] = [
-  { mode: 1, name: "常亮", rgb: true, speed: false, kind: "onboard" },
-  { mode: 2, name: "动态呼吸", rgb: true, speed: true, kind: "onboard" },
-  { mode: 3, name: "光谱循环", rgb: false, speed: true, kind: "onboard" },
-  { mode: 4, name: "随波逐流", rgb: true, speed: true, options: ["向右", "向左", "向下", "向上"], kind: "onboard" },
-  { mode: 5, name: "碧波荡漾", rgb: true, speed: true, kind: "onboard" },
-  { mode: 6, name: "繁星点点", rgb: true, speed: true, kind: "onboard" },
-  { mode: 7, name: "川流不息", rgb: true, speed: true, options: ["Z 字", "回环"], kind: "onboard" },
-  { mode: 8, name: "如影随形", rgb: true, speed: true, kind: "onboard" },
-  { mode: 9, name: "重峦叠嶂", rgb: true, speed: true, kind: "onboard" },
-  { mode: 10, name: "正弦波", rgb: true, speed: true, kind: "onboard" },
-  { mode: 11, name: "彩泉涌动", rgb: true, speed: true, options: ["向外", "向内"], kind: "onboard" },
-  { mode: 12, name: "百花争艳", rgb: true, speed: true, options: ["向右", "向左"], kind: "onboard" },
-  { mode: 14, name: "一石二鸟", rgb: true, speed: true, kind: "onboard" },
-  { mode: 15, name: "峰回路转", rgb: true, speed: true, options: ["逆时针", "顺时针"], kind: "onboard" },
-  { mode: 16, name: "多彩纵横", rgb: true, speed: true, kind: "onboard" },
-  { mode: 17, name: "漫天飞雪", rgb: true, speed: true, kind: "onboard" },
-  { mode: 18, name: "流星", rgb: true, speed: true, kind: "onboard" },
-  { mode: 19, name: "踏雪无痕", rgb: true, speed: true, kind: "onboard" },
-  { mode: 13, name: "逐键自定义", rgb: false, speed: false, kind: "custom" },
-  { mode: 22, name: "音乐律动", rgb: false, speed: false, kind: "music" },
-  { mode: 21, name: "屏幕光影", rgb: false, speed: false, kind: "screen" },
+  { mode: 1, name: t("常亮"), rgb: true, speed: false, kind: "onboard" },
+  { mode: 2, name: t("动态呼吸"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 3, name: t("光谱循环"), rgb: false, speed: true, kind: "onboard" },
+  { mode: 4, name: t("随波逐流"), rgb: true, speed: true, options: [t("向右"), t("向左"), t("向下"), t("向上")], kind: "onboard" },
+  { mode: 5, name: t("碧波荡漾"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 6, name: t("繁星点点"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 7, name: t("川流不息"), rgb: true, speed: true, options: [t("Z 字"), t("回环")], kind: "onboard" },
+  { mode: 8, name: t("如影随形"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 9, name: t("重峦叠嶂"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 10, name: t("正弦波"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 11, name: t("彩泉涌动"), rgb: true, speed: true, options: [t("向外"), t("向内")], kind: "onboard" },
+  { mode: 12, name: t("百花争艳"), rgb: true, speed: true, options: [t("向右"), t("向左")], kind: "onboard" },
+  { mode: 14, name: t("一石二鸟"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 15, name: t("峰回路转"), rgb: true, speed: true, options: [t("逆时针"), t("顺时针")], kind: "onboard" },
+  { mode: 16, name: t("多彩纵横"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 17, name: t("漫天飞雪"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 18, name: t("流星"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 19, name: t("踏雪无痕"), rgb: true, speed: true, kind: "onboard" },
+  { mode: 13, name: t("逐键自定义"), rgb: false, speed: false, kind: "custom" },
+  { mode: 22, name: t("音乐律动"), rgb: false, speed: false, kind: "music" },
+  { mode: 21, name: t("屏幕光影"), rgb: false, speed: false, kind: "screen" },
 ];
 
 export const effectByMode = (mode: number) => EFFECTS.find((e) => e.mode === mode);

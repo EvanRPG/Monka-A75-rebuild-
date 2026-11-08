@@ -18,9 +18,9 @@ use crate::commands::{
 };
 use crate::hid::Link;
 use crate::music::{self, Analyzer, MusicParams, Ring, BANDS};
-use crate::win;
 use crate::ops;
 use crate::protocol::{packet, Checksum, LedParam};
+use crate::win;
 use crate::wire::block_on;
 
 pub const A75_ID: u32 = 1549;
@@ -68,7 +68,11 @@ fn code_of(rate: u16) -> Option<u8> {
 fn read_rate(state: &tauri::State<AppState>) -> Result<Option<u16>, String> {
     let reply = with_open(state, |t, _| t.roundtrip(GET_REPORT, &[0], Checksum::Bit7))?;
     log::info!("GET_REPORT reply {:02X?}", &reply[..8]);
-    Ok(if reply[0] == GET_REPORT { rate_of(reply[2]) } else { None })
+    Ok(if reply[0] == GET_REPORT {
+        rate_of(reply[2])
+    } else {
+        None
+    })
 }
 
 /// Current rate, or null when the keyboard does not answer the read in a
@@ -82,14 +86,19 @@ pub fn a75_get_report_rate(state: tauri::State<AppState>) -> Result<Option<u16>,
 /// Write, then read back. Refused unless the read already works: a write
 /// with no working read would be a blind write to an unproven register.
 #[tauri::command(async)]
-pub fn a75_set_report_rate(state: tauri::State<AppState>, rate: u16) -> Result<Option<u16>, String> {
+pub fn a75_set_report_rate(
+    state: tauri::State<AppState>,
+    rate: u16,
+) -> Result<Option<u16>, String> {
     require_a75(&state, false)?;
     let code = code_of(rate).ok_or("回报率只能是 125、250、500 或 1000")?;
     if read_rate(&state)?.is_none() {
         return Err("键盘没有正常回应回报率查询，为安全起见不写入".into());
     }
     write_gap(&state, SETTING_GAP);
-    with_writable(&state, |t, _| t.send(&packet(SET_REPORT, &[0, code], Checksum::Bit7)))?;
+    with_writable(&state, |t, _| {
+        t.send(&packet(SET_REPORT, &[0, code], Checksum::Bit7))
+    })?;
     std::thread::sleep(Duration::from_millis(300));
     read_rate(&state)
 }
@@ -136,7 +145,14 @@ pub struct MusicState {
 fn live_mode(p: &MusicParams) -> (u8, u8) {
     match p.source.as_str() {
         "screen" => (MODE_SCREEN, 0),
-        "music" => (if p.mode == MODE_MUSIC_3 { MODE_MUSIC_3 } else { MODE_MUSIC }, p.style.min(2)),
+        "music" => (
+            if p.mode == MODE_MUSIC_3 {
+                MODE_MUSIC_3
+            } else {
+                MODE_MUSIC
+            },
+            p.style.min(2),
+        ),
         // Meters read as bars only in the upright layout, verified on the board.
         _ => (MODE_MUSIC, 0),
     }
@@ -181,7 +197,9 @@ pub fn a75_music_start(
     require_a75(&state, true)?;
     {
         let mut guard = music_state.run.lock();
-        let finished = guard.as_ref().is_some_and(|r| r.thread.as_ref().is_none_or(|t| t.is_finished()));
+        let finished = guard
+            .as_ref()
+            .is_some_and(|r| r.thread.as_ref().is_none_or(|t| t.is_finished()));
         if finished {
             // The stream ended on its own (unplugged, stalled): start fresh.
             *guard = None;
@@ -196,7 +214,16 @@ pub fn a75_music_start(
     // Still in a stream mode (an earlier run that never restored)? Fall back
     // to a plain static white so stop leaves the board lit.
     let before = if matches!(before.mode, MODE_MUSIC | MODE_MUSIC_3 | MODE_SCREEN) {
-        LedParam { mode: 1, speed: 0, brightness: 4, option: 0, dazzle: false, r: 255, g: 255, b: 255 }
+        LedParam {
+            mode: 1,
+            speed: 0,
+            brightness: 4,
+            option: 0,
+            dazzle: false,
+            r: 255,
+            g: 255,
+            b: 255,
+        }
     } else {
         before
     };
@@ -257,7 +284,13 @@ pub fn a75_music_start(
         color: None,
         error: None,
     };
-    *music_state.run.lock() = Some(Run { stop, params: shared, thread: Some(thread), before, led_sent: mode });
+    *music_state.run.lock() = Some(Run {
+        stop,
+        params: shared,
+        thread: Some(thread),
+        before,
+        led_sent: mode,
+    });
     go.store(true, Ordering::Relaxed);
     Ok(())
 }
@@ -366,13 +399,26 @@ fn stream(
     while !stop.load(Ordering::Relaxed) {
         let p = params.lock().clone();
         let (pkt, levels, color) = if p.source == "screen" {
-            let c = win::screen_average().map(|c| music::boost_color(c, p.boost)).unwrap_or([0, 0, 0]);
-            (packet(SET_WINDOS, &[c[0], c[1], c[2], 0xFF], Checksum::Bit7), None, Some(c))
+            let c = win::screen_average()
+                .map(|c| music::boost_color(c, p.boost))
+                .unwrap_or([0, 0, 0]);
+            (
+                packet(SET_WINDOS, &[c[0], c[1], c[2], 0xFF], Checksum::Bit7),
+                None,
+                Some(c),
+            )
         } else {
-            let mut lv = if p.source == "music" { analyzer.levels(&ring.latest(), &p) } else { meters.levels(&p) };
+            let mut lv = if p.source == "music" {
+                analyzer.levels(&ring.latest(), &p)
+            } else {
+                meters.levels(&p)
+            };
             if p.source == "music" && p.volume_overlay {
                 meters.poll_volume();
-                if meters.volume_changed.is_some_and(|t| t.elapsed() < Duration::from_millis(1500)) {
+                if meters
+                    .volume_changed
+                    .is_some_and(|t| t.elapsed() < Duration::from_millis(1500))
+                {
                     lv = meters.volume_fill();
                 }
             }
@@ -394,7 +440,11 @@ fn stream(
             st.color = color;
         }
         // The vendor samples the screen every 40 ms; music goes at 32 fps.
-        next += if p.source == "screen" { Duration::from_millis(40) } else { Duration::from_micros(music::FRAME_US) };
+        next += if p.source == "screen" {
+            Duration::from_millis(40)
+        } else {
+            Duration::from_micros(music::FRAME_US)
+        };
         let now = Instant::now();
         if next > now {
             std::thread::sleep(next - now);
@@ -440,7 +490,9 @@ pub fn a75_music_params(
 ) -> Result<(), String> {
     let relight = {
         let mut guard = music_state.run.lock();
-        let Some(run) = guard.as_mut() else { return Ok(()) };
+        let Some(run) = guard.as_mut() else {
+            return Ok(());
+        };
         let mode = live_mode(&params);
         *run.params.lock() = params;
         if run.led_sent != mode {
@@ -489,7 +541,13 @@ pub struct Prefs {
 
 impl Default for Prefs {
     fn default() -> Self {
-        Self { rules_enabled: false, rules: vec![], stats_enabled: false, battery_alert: 20, close_to_tray: true }
+        Self {
+            rules_enabled: false,
+            rules: vec![],
+            stats_enabled: false,
+            battery_alert: 20,
+            close_to_tray: true,
+        }
     }
 }
 
@@ -545,7 +603,12 @@ pub fn a75_prefs_set(app: AppHandle, prefs: Prefs) -> Result<(), String> {
 /// Programs seen in front recently, newest first, for "add this program".
 #[tauri::command(async)]
 pub fn a75_recent_apps(app: AppHandle) -> Vec<String> {
-    app.state::<Extras>().recent.lock().iter().cloned().collect()
+    app.state::<Extras>()
+        .recent
+        .lock()
+        .iter()
+        .cloned()
+        .collect()
 }
 
 fn set_win_lock(app: &AppHandle, on: bool) {
@@ -577,7 +640,9 @@ fn start_rules_watcher(app: AppHandle) {
         let mut applied: Option<String> = None;
         loop {
             std::thread::sleep(Duration::from_secs(1));
-            let Some(exe) = win::foreground_exe() else { continue };
+            let Some(exe) = win::foreground_exe() else {
+                continue;
+            };
             let p = prefs(&app);
             let rules_key = serde_json::to_string(&(p.rules_enabled, &p.rules)).unwrap_or_default();
             if exe == last_exe && rules_key == last_rules {
@@ -604,7 +669,10 @@ fn start_rules_watcher(app: AppHandle) {
                 continue;
             }
             let rule = if p.rules_enabled {
-                p.rules.iter().find(|r| r.exe.eq_ignore_ascii_case(&exe)).cloned()
+                p.rules
+                    .iter()
+                    .find(|r| r.exe.eq_ignore_ascii_case(&exe))
+                    .cloned()
             } else {
                 None
             };
@@ -649,12 +717,19 @@ static STATS_SINCE: Mutex<Option<String>> = Mutex::new(None);
 fn on_key(vk: u32) {
     KEY_TOTAL.fetch_add(1, Ordering::Relaxed);
     if let Some(u) = win::vk_to_usage(vk) {
-        *KEY_COUNTS.lock().get_or_insert_with(HashMap::new).entry(u).or_insert(0) += 1;
+        *KEY_COUNTS
+            .lock()
+            .get_or_insert_with(HashMap::new)
+            .entry(u)
+            .or_insert(0) += 1;
     }
     let now = Instant::now();
     let mut r = KEY_RECENT.lock();
     r.push_back(now);
-    while r.front().is_some_and(|t| now.duration_since(*t) > Duration::from_secs(60)) {
+    while r
+        .front()
+        .is_some_and(|t| now.duration_since(*t) > Duration::from_secs(60))
+    {
         r.pop_front();
     }
 }
@@ -682,7 +757,11 @@ fn stats_load(app: &AppHandle) {
         .unwrap_or_default();
     KEY_TOTAL.store(saved.total, Ordering::Relaxed);
     *KEY_COUNTS.lock() = Some(saved.counts);
-    *STATS_SINCE.lock() = Some(if saved.since.is_empty() { today() } else { saved.since });
+    *STATS_SINCE.lock() = Some(if saved.since.is_empty() {
+        today()
+    } else {
+        saved.since
+    });
 }
 
 fn stats_save(app: &AppHandle) {
@@ -691,7 +770,10 @@ fn stats_save(app: &AppHandle) {
         total: KEY_TOTAL.load(Ordering::Relaxed),
         since: STATS_SINCE.lock().clone().unwrap_or_else(today),
     };
-    if let (Some(f), Ok(text)) = (config_file(app, "a75-stats.json"), serde_json::to_string(&saved)) {
+    if let (Some(f), Ok(text)) = (
+        config_file(app, "a75-stats.json"),
+        serde_json::to_string(&saved),
+    ) {
         let _ = std::fs::write(f, text);
     }
 }
@@ -786,5 +868,10 @@ pub fn a75_autostart_set(app: AppHandle, on: bool) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn a75_notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
     use tauri_plugin_notification::NotificationExt;
-    app.notification().builder().title(title).body(body).show().map_err(|e| e.to_string())
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|e| e.to_string())
 }

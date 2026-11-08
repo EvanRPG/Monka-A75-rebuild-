@@ -8,9 +8,10 @@ import { cn } from "@/lib/utils";
 import { useApp } from "@/lib/store";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Circle, Save, Square, Trash2, Plus } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 
-const usageName = (u: number) => findFn([0, 0, u, 0])?.label ?? `键码 ${u}`;
+const usageName = (u: number) => findFn([0, 0, u, 0])?.label ?? t("键码 {0}", u);
 
 /** US-layout keystrokes for a phrase: [usage, needs shift]. */
 const CHAR: Record<string, [number, boolean]> = {
@@ -104,12 +105,12 @@ export default function Macros() {
       const back = await api.readMacro(slot);
       setNames((n) => ({ ...n, [slot]: back.events.length }));
       if (back.events.length !== macro.events.length) {
-        toast.error(`宏 ${slot + 1} 写入后读回不一致（写 ${macro.events.length} 步，读回 ${back.events.length} 步）`);
+        toast.error(t("宏 {0} 写入后读回不一致（写 {1} 步，读回 {2} 步）", slot + 1, macro.events.length, back.events.length));
       } else {
-        toast.success(`宏 ${slot + 1} 已保存到键盘`);
+        toast.success(t("宏 {0} 已保存到键盘", slot + 1));
       }
     } catch (e) {
-      toast.error(`保存失败：${e}`);
+      toast.error(t("保存失败：{0}", e));
     } finally {
       setSaving(false);
     }
@@ -130,51 +131,51 @@ export default function Macros() {
               i === slot ? "bg-accent font-medium" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <span>宏 {i + 1}</span>
-            <span className="tabular text-xs text-muted-foreground">{names[i] ? `${names[i]} 步` : "空"}</span>
+            <span>{t("宏")} {i + 1}</span>
+            <span className="tabular text-xs text-muted-foreground">{names[i] ? t("{0} 步", names[i]) : t("空")}</span>
           </button>
         ))}
       </nav>
       <div className="flex min-w-0 flex-col gap-4 overflow-y-auto px-4 py-5 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-auto text-[15px] font-semibold">宏 {slot + 1}</h2>
+          <h2 className="mr-auto text-[15px] font-semibold">{t("宏")} {slot + 1}</h2>
           <Button variant={recording ? "destructive" : "outline"} size="sm" onClick={() => {
             if (!recording) { setMacro((m) => ({ ...m, events: [] })); last.current = performance.now(); }
             setRecording(!recording);
           }}>
             {recording ? <Square /> : <Circle className="text-destructive" />}
-            {recording ? "停止录制" : "重新录制"}
+            {recording ? t("停止录制") : t("重新录制")}
           </Button>
           <Button variant="outline" size="sm" disabled={recording} onClick={() => setMacro((m) => ({ ...m, events: [...m.events, { kind: "key", usage: 4, pressed: true, delayMs: 20 }, { kind: "key", usage: 4, pressed: false, delayMs: 20 }] }))}>
             <Plus />
-            添加按键
+            {t("添加按键")}
           </Button>
           <Button size="sm" onClick={save} disabled={saving || recording}>
             <Save />
-            保存到键盘
+            {t("保存到键盘")}
           </Button>
         </div>
         {recording && (
           <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[13px]">
             <span className="size-2 animate-pulse rounded-full bg-destructive" />
-            正在录制：直接在键盘上按键，按键之间的间隔也会记下来。
+            {t("正在录制：直接在键盘上按键，按键之间的间隔也会记下来。")}
           </div>
         )}
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="grid grid-cols-[44px_minmax(0,1fr)_120px_40px] items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
             <span>#</span>
-            <span>动作</span>
-            <span>之后等待</span>
+            <span>{t("动作")}</span>
+            <span>{t("之后等待")}</span>
             <span />
           </div>
-          {macro.events.length === 0 && <p className="px-3 py-10 text-center text-[13px] text-muted-foreground">还没有步骤。点「重新录制」开始。</p>}
+          {macro.events.length === 0 && <p className="px-3 py-10 text-center text-[13px] text-muted-foreground">{t("还没有步骤。点「重新录制」开始。")}</p>}
           {macro.events.map((e, i) => (
             <div key={i} className="grid grid-cols-[44px_minmax(0,1fr)_120px_40px] items-center gap-2 border-b border-border px-3 py-1.5 last:border-b-0">
               <span className="tabular font-mono text-xs text-muted-foreground">{i + 1}</span>
               <span className="flex min-w-0 items-center gap-2 text-[13px]">
                 {e.kind !== "mouseMove" && (e.pressed ? <ArrowDown className="size-3.5 shrink-0 text-primary" /> : <ArrowUp className="size-3.5 shrink-0 text-muted-foreground" />)}
                 <span className="truncate">
-                  {e.kind === "key" ? `${e.pressed ? "按下" : "松开"} ${usageName(e.usage)}` : e.kind === "mouseButton" ? `${e.pressed ? "按下" : "松开"} 鼠标键 ${e.button}` : `鼠标移动 ${e.dx}, ${e.dy}`}
+                  {e.kind === "key" ? `${e.pressed ? t("按下") : t("松开")} ${usageName(e.usage)}` : e.kind === "mouseButton" ? t("{0} 鼠标键 {1}", e.pressed ? t("按下") : t("松开"), e.button) : t("鼠标移动 {0}, {1}", e.dx, e.dy)}
                 </span>
               </span>
               <div className="flex items-center gap-1">
@@ -189,7 +190,7 @@ export default function Macros() {
                 />
                 <span className="text-xs text-muted-foreground">ms</span>
               </div>
-              <Button variant="ghost" size="icon-xs" aria-label="删除这一步" onClick={() => setMacro((m) => ({ ...m, events: m.events.filter((_, j) => j !== i) }))}>
+              <Button variant="ghost" size="icon-xs" aria-label={t("删除这一步")} onClick={() => setMacro((m) => ({ ...m, events: m.events.filter((_, j) => j !== i) }))}>
                 <Trash2 />
               </Button>
             </div>
@@ -197,22 +198,22 @@ export default function Macros() {
         </div>
       </div>
       <aside className="min-w-0 overflow-y-auto border-t border-border bg-card md:col-span-2 lg:col-span-1 lg:border-t-0 lg:border-l">
-        <Section title="执行">
+        <Section title={t("执行")}>
           <label htmlFor="macro-repeat" className="flex items-center justify-between gap-3 text-[13px]">
-            重复次数
+            {t("重复次数")}
             <Input id="macro-repeat" type="number" min={1} max={65535} value={macro.repeat} onChange={(e) => setMacro({ ...macro, repeat: Math.max(1, Math.min(65535, Number(e.target.value) || 1)) })} className="tabular h-8 w-24" />
           </label>
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>{macro.events.length} 步</span>
-            <span className="tabular">单次约 {(total / 1000).toFixed(2)} 秒</span>
+            <span>{macro.events.length} {t("步")}</span>
+            <span className="tabular">{t("单次约")} {(total / 1000).toFixed(2)} {t("秒")}</span>
           </div>
         </Section>
-        {experimental && <Section title="输入一段文字">
-          <p className="text-xs leading-relaxed text-muted-foreground">把常用的邮箱、签名、指令变成宏，按一个键就自动打出来。只支持英文、数字和键盘上的符号（中文要靠输入法，宏打不出来）。</p>
-          <Input id="macro-phrase" value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="在这里输入，比如你的邮箱" className="h-9" />
+        {experimental && <Section title={t("输入一段文字")}>
+          <p className="text-xs leading-relaxed text-muted-foreground">{t("把常用的邮箱、签名、指令变成宏，按一个键就自动打出来。只支持英文、数字和键盘上的符号（中文要靠输入法，宏打不出来）。")}</p>
+          <Input id="macro-phrase" value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder={t("在这里输入，比如你的邮箱")} className="h-9" />
           <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="ghost" disabled={recording} onClick={() => setPhrase("hello@example.com")}>
-            填入示例
+            {t("填入示例")}
           </Button>
           <Button
             size="sm"
@@ -221,23 +222,23 @@ export default function Macros() {
             onClick={() => {
               const { events, skipped } = phraseEvents(phrase);
               if (events.length > 120) {
-                toast.error("文字太长，键盘的一个宏最多放大约 60 个字母");
+                toast.error(t("文字太长，键盘的一个宏最多放大约 60 个字母"));
                 return;
               }
               setMacro((m) => ({ ...m, events }));
-              if (skipped) toast.info(`有 ${skipped} 个字符不能用宏输入，已跳过`);
+              if (skipped) toast.info(t("有 {0} 个字符不能用宏输入，已跳过", skipped));
             }}
           >
-            生成步骤（替换当前步骤）
+            {t("生成步骤（替换当前步骤）")}
           </Button>
           </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">生成后记得点上方「保存到键盘」，再到按键页绑定。使用时先把电脑输入法切到英文，否则字母会被输入法拦下。</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">{t("生成后记得点上方「保存到键盘」，再到按键页绑定。使用时先把电脑输入法切到英文，否则字母会被输入法拦下。")}</p>
         </Section>}
-        <Section title="绑定到按键">
-          <p className="text-[13px] leading-relaxed text-muted-foreground">保存后，到「按键」页选一个键，在「宏」分类里点「宏 {slot + 1}」。那里还能选触发方式：按一下执行、按一下开/关、按住循环。</p>
+        <Section title={t("绑定到按键")}>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">{t("保存后，到「按键」页选一个键，在「宏」分类里点「宏 {0}」。那里还能选触发方式：按一下执行、按一下开/关、按住循环。", slot + 1)}</p>
         </Section>
-        <Section title="说明">
-          <Callout>宏会存进键盘，换电脑也能用。保存时软件会控制写入节奏，连续保存之间会稍等几秒。</Callout>
+        <Section title={t("说明")}>
+          <Callout>{t("宏会存进键盘，换电脑也能用。保存时软件会控制写入节奏，连续保存之间会稍等几秒。")}</Callout>
         </Section>
       </aside>
     </div>

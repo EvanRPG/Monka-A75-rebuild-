@@ -4,6 +4,7 @@
 // interface can be tried without a keyboard.
 import { invoke } from "@tauri-apps/api/core";
 import { mockBackend } from "./mock";
+import { t } from "@/lib/i18n";
 
 export interface ConnectedDevice {
   path: string;
@@ -229,13 +230,13 @@ const tauriBackend: Backend = {
   setProfile: (profile) => invoke("set_profile", { profile }),
   async exportConfig() {
     const { save } = await import("@tauri-apps/plugin-dialog");
-    const path = await save({ defaultPath: "A75-备份.json", filters: [{ name: "A75 配置", extensions: ["json"] }] });
+    const path = await save({ defaultPath: t("A75-备份.json"), filters: [{ name: t("A75 配置"), extensions: ["json"] }] });
     if (!path) return null;
     return invoke<string>("export_config", { path });
   },
   async importConfig() {
     const { open } = await import("@tauri-apps/plugin-dialog");
-    const path = await open({ multiple: false, filters: [{ name: "A75 配置", extensions: ["json"] }] });
+    const path = await open({ multiple: false, filters: [{ name: t("A75 配置"), extensions: ["json"] }] });
     if (!path || Array.isArray(path)) return null;
     return invoke<string>("import_config", { path });
   },

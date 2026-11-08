@@ -11,14 +11,15 @@ import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Cpu, MemoryStick, Play, Square, Timer, Volume2 } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 type Meter = Extract<LiveSource, "cpu" | "ram" | "volume" | "timer">;
 
 const METERS: { id: Meter; name: string; desc: string; icon: typeof Cpu; color: (b: number) => Rgb }[] = [
-  { id: "cpu", name: "CPU 占用", desc: "最近 8 秒的 CPU 曲线，从左往右滚动", icon: Cpu, color: (b) => [77, Math.round(141 + b * 3), 255] },
-  { id: "ram", name: "内存占用", desc: "已用内存的比例，从左往右填满", icon: MemoryStick, color: () => [191, 90, 242] },
-  { id: "volume", name: "系统音量", desc: "当前音量，转旋钮马上能看到变化", icon: Volume2, color: () => [52, 199, 89] },
-  { id: "timer", name: "倒计时", desc: "番茄钟：剩余时间从右往左缩短，到点全键盘闪烁", icon: Timer, color: (b) => [255, Math.round(149 - b * 2), 0] },
+  { id: "cpu", name: t("CPU 占用"), desc: t("当前 CPU 占用，用灯柱高度显示，越满越忙"), icon: Cpu, color: (b) => [77, Math.round(141 + b * 3), 255] },
+  { id: "ram", name: t("内存占用"), desc: t("已用内存的比例，用灯柱高度显示"), icon: MemoryStick, color: () => [191, 90, 242] },
+  { id: "volume", name: t("系统音量"), desc: t("当前音量，转旋钮马上能看到变化"), icon: Volume2, color: () => [52, 199, 89] },
+  { id: "timer", name: t("倒计时"), desc: t("番茄钟：剩余时间越少灯柱越低，到点全键盘闪烁"), icon: Timer, color: (b) => [255, Math.round(149 - b * 2), 0] },
 ];
 
 export default function Meters() {
@@ -52,7 +53,7 @@ export default function Meters() {
       if (running) await stopLive();
       else await startLive(params(meter));
     } catch (e) {
-      toast.error(`${running ? "停止" : "启动"}失败：${e}`);
+      toast.error(running ? t("停止失败：{0}", e) : t("启动失败：{0}", e));
     } finally {
       setBusy(false);
     }
@@ -89,23 +90,23 @@ export default function Meters() {
               );
             })}
           </div>
-          <LiveBars levels={running ? live.levels : new Array(32).fill(0)} title="发往键盘的画面" note="32 列，每列 0 到 6 格" />
+          <LiveBars levels={running ? live.levels : new Array(32).fill(0)} title={t("发往键盘的画面")} note={t("32 列，每列 0 到 6 格")} />
         </div>
       }
       panel={
         <>
           <div className="flex flex-col gap-3 px-5 pt-5 pb-4">
             <div className="flex items-center gap-2">
-              <span className="text-lg font-semibold">键盘仪表</span>
-              <Tag tone="warn">实验功能</Tag>
+              <span className="text-lg font-semibold">{t("键盘仪表")}</span>
+              <Tag tone="warn">{t("实验功能")}</Tag>
             </div>
             <Button onClick={toggle} disabled={busy} variant={running ? "secondary" : "default"} className="h-10 w-full">
               {running ? <Square /> : <Play />}
-              {running ? "停止显示" : live.running ? `切换到${def.name}` : `开始显示${def.name}`}
+              {running ? t("停止显示") : live.running ? t("切换到{0}", def.name) : t("开始显示{0}", def.name)}
             </Button>
           </div>
           {meter === "timer" && (
-            <Section title="倒计时长度">
+            <Section title={t("倒计时长度")}>
               <div className="flex flex-wrap gap-1.5">
                 {[5, 15, 25, 45].map((m) => (
                   <Button
@@ -117,12 +118,12 @@ export default function Meters() {
                       if (running) updateLive(params("timer", m));
                     }}
                   >
-                    {m} 分钟
+                    {m} {t("分钟")}
                   </Button>
                 ))}
               </div>
               <label htmlFor="timer-min" className="flex items-center justify-between gap-3 text-[13px]">
-                自定义（分钟）
+                {t("自定义（分钟）")}
                 <Input
                   id="timer-min"
                   type="number"
@@ -134,16 +135,16 @@ export default function Meters() {
                   className="tabular h-8 w-24"
                 />
               </label>
-              <p className="text-xs text-muted-foreground">改时长会从头开始计时。</p>
+              <p className="text-xs text-muted-foreground">{t("改时长会从头开始计时。")}</p>
             </Section>
           )}
-          <Section title="原理">
+          <Section title={t("原理")}>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              借用音乐律动的「竖立」画法：键盘被当成 32 列 × 6 格的小屏幕，由电脑实时送数据。颜色由键盘的律动配色决定，左边的预览只是示意。
+              {t("借用音乐律动的「竖立」画法，由电脑实时送数据：CPU、内存和倒计时用整片灯的高度（0 到 6 格）表示，音量用从左到右的长度表示。颜色由键盘的律动配色决定，左边的预览只是示意。")}
             </p>
           </Section>
-          <Section title="注意">
-            <Callout tone="warn">需要插着线使用。显示期间原来的灯效会暂停，停止后自动恢复。切到别的页面也会继续显示，顶栏可以随时停止。</Callout>
+          <Section title={t("注意")}>
+            <Callout tone="warn">{t("需要插着线使用。显示期间原来的灯效会暂停，停止后自动恢复。切到别的页面也会继续显示，顶栏可以随时停止。")}</Callout>
           </Section>
         </>
       }

@@ -1,4 +1,5 @@
 import { hue } from "@/lib/live";
+import { t } from "@/lib/i18n";
 
 /** The 32 levels last sent, as the bar chart under the keyboard. */
 export function LiveBars({ levels, title, note }: { levels: number[]; title: string; note?: string }) {
@@ -10,9 +11,9 @@ export function LiveBars({ levels, title, note }: { levels: number[]; title: str
           <h3 className="text-[13px] font-semibold">{title}</h3>
           {note && <span className="text-xs text-muted-foreground">{note}</span>}
         </div>
-        <span className="tabular font-mono text-xs text-muted-foreground">峰值 {peak} / 6</span>
+        <span className="tabular font-mono text-xs text-muted-foreground">{t("峰值")} {peak} / 6</span>
       </div>
-      <div className="flex h-28 items-end gap-[3px]" aria-label="电平">
+      <div className="flex h-28 items-end gap-[3px]" aria-label={t("电平")}>
         {levels.map((v, i) => (
           <div key={i} className="flex h-full flex-1 flex-col-reverse gap-[2px]">
             {Array.from({ length: 6 }, (_, j) => (

@@ -8,6 +8,7 @@ import { api, type Prefs, type Stats as StatsT } from "@/lib/backend";
 import type { Rgb } from "@/lib/effects";
 import { toast } from "sonner";
 import { Upload } from "lucide-react";
+import { t } from "@/lib/i18n";
 
 const BASE = defaultMatrix();
 /** HID usage the key sends out of the box, for matching counts to keys. */
@@ -42,8 +43,8 @@ export default function Stats() {
     api.getPrefs().then(setPrefs).catch(() => {});
     const load = () => api.getStats().then(setStats).catch(() => {});
     load();
-    const t = setInterval(load, 2000);
-    return () => clearInterval(t);
+    const iv = setInterval(load, 2000);
+    return () => clearInterval(iv);
   }, []);
 
   const max = useMemo(() => Math.max(1, ...Object.values(stats?.counts ?? {})), [stats]);
@@ -66,7 +67,7 @@ export default function Stats() {
     const p = { ...prefs, statsEnabled: on };
     setPrefs(p);
     if (on) setEnabledAt(Date.now());
-    await api.setPrefs(p).catch((e) => toast.error(`保存失败：${e}`));
+    await api.setPrefs(p).catch((e) => toast.error(t("保存失败：{0}", e)));
     setStats(await api.getStats());
   };
 
@@ -79,9 +80,9 @@ export default function Stats() {
         colors.splice(k.slot * 3, 3, ...c);
       }
       await api.writePerKey(colors, true);
-      toast.success("热力图已写进键盘（逐键自定义模式）");
+      toast.success(t("热力图已写进键盘（逐键自定义模式）"));
     } catch (e) {
-      toast.error(`写入失败：${e}`);
+      toast.error(t("写入失败：{0}", e));
     } finally {
       setWriting(false);
     }
@@ -95,15 +96,15 @@ export default function Stats() {
       below={
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="grid grid-cols-2 gap-3">
-            <Stat label="总按键次数" value={stats ? stats.total.toLocaleString("zh-CN") : "—"} />
-            <Stat label="最近一分钟" value={stats ? `${stats.perMinute} 次` : "—"} />
-            <Stat label="统计开始于" value={since || "—"} />
-            <Stat label="按过的键" value={stats ? `${Object.keys(stats.counts).length} 个` : "—"} />
+            <Stat label={t("总按键次数")} value={stats ? stats.total.toLocaleString("zh-CN") : "—"} />
+            <Stat label={t("最近一分钟")} value={stats ? t("{0} 次", stats.perMinute) : "—"} />
+            <Stat label={t("统计开始于")} value={since || "—"} />
+            <Stat label={t("按过的键")} value={stats ? t("{0} 个", Object.keys(stats.counts).length) : "—"} />
           </div>
           <div className="rounded-xl border border-border bg-card p-4">
-            <h3 className="mb-2 text-[13px] font-semibold">最常用的 10 个键</h3>
+            <h3 className="mb-2 text-[13px] font-semibold">{t("最常用的 10 个键")}</h3>
             {top.length === 0 ? (
-              <p className="py-4 text-[13px] text-muted-foreground">还没有数据。打开右侧开关后正常打字即可。</p>
+              <p className="py-4 text-[13px] text-muted-foreground">{t("还没有数据。打开右侧开关后正常打字即可。")}</p>
             ) : (
               <ol className="flex flex-col gap-1.5">
                 {top.map(({ k, n }) => (
@@ -124,30 +125,30 @@ export default function Stats() {
         <>
           <div className="flex flex-col gap-3 px-5 pt-5 pb-4">
             <div className="flex items-center gap-2">
-              <span className="text-lg font-semibold">打字统计</span>
-              <Tag tone="warn">实验功能</Tag>
+              <span className="text-lg font-semibold">{t("打字统计")}</span>
+              <Tag tone="warn">{t("实验功能")}</Tag>
             </div>
             <label htmlFor="stats-on" className="flex items-center justify-between gap-3 text-[13px]">
-              记录按键次数
+              {t("记录按键次数")}
               <Switch id="stats-on" checked={!!prefs?.statsEnabled} onCheckedChange={toggle} />
             </label>
-            {prefs?.statsEnabled && stats && !stats.active && Date.now() - enabledAt > 4000 && <p className="text-xs text-destructive">计数没有启动：这台电脑不允许软件监听按键。</p>}
+            {prefs?.statsEnabled && stats && !stats.active && Date.now() - enabledAt > 4000 && <p className="text-xs text-destructive">{t("计数没有启动：这台电脑不允许软件监听按键。")}</p>}
           </div>
-          <Section title="隐私">
-            <Callout>只数每个键按了几次，不记录你打了什么字，也不记录顺序。数据只存在这台电脑上，不会上传。关掉开关就停止记录。</Callout>
+          <Section title={t("隐私")}>
+            <Callout>{t("只数每个键按了几次，不记录你打了什么字，也不记录顺序。数据只存在这台电脑上，不会上传。关掉开关就停止记录。")}</Callout>
           </Section>
-          <Section title="热力图">
-            <p className="text-xs leading-relaxed text-muted-foreground">左边键盘图上，越常按的键越红，按得少的偏蓝。也可以把它写进键盘，作为逐键灯光图案。</p>
+          <Section title={t("热力图")}>
+            <p className="text-xs leading-relaxed text-muted-foreground">{t("左边键盘图上，越常按的键越红，按得少的偏蓝。也可以把它写进键盘，作为逐键灯光图案。")}</p>
             <Button variant="outline" disabled={writing || !stats || stats.total === 0} onClick={writeHeatmap}>
               <Upload />
-              {writing ? "正在写入…" : "把热力图写进键盘"}
+              {writing ? t("正在写入…") : t("把热力图写进键盘")}
             </Button>
           </Section>
-          <Section title="清空">
+          <Section title={t("清空")}>
             {confirm ? (
               <div className="flex items-center gap-2">
-                <span className="mr-auto text-[13px] text-destructive">清空所有统计？</span>
-                <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>取消</Button>
+                <span className="mr-auto text-[13px] text-destructive">{t("清空所有统计？")}</span>
+                <Button size="sm" variant="ghost" onClick={() => setConfirm(false)}>{t("取消")}</Button>
                 <Button
                   size="sm"
                   variant="destructive"
@@ -157,12 +158,12 @@ export default function Stats() {
                     setConfirm(false);
                   }}
                 >
-                  清空
+                  {t("清空")}
                 </Button>
               </div>
             ) : (
               <Button size="sm" variant="outline" className="self-start" onClick={() => setConfirm(true)}>
-                清空统计
+                {t("清空统计")}
               </Button>
             )}
           </Section>
