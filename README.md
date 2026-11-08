@@ -1,197 +1,105 @@
 <p align="center">
-  <img src="docs/logo.svg" width="96" alt="sharkfin" />
+  <img src="app/src-tauri/icons/128x128.png" width="88" alt="A75" />
 </p>
 
-<h1 align="center">sharkfin</h1>
+<h1 align="center">A75 Driver</h1>
 
 <p align="center">
-  Open-source configurator for Attack Shark and other ROYUAN keyboards.<br/>
-  Linux, Windows, macOS, or straight from a Chromium browser.
+  魔咖 Monka A75 三模机械键盘的第三方驱动，中文界面，Windows。<br/>
+  An unofficial driver for the Monka A75 keyboard. <a href="#english">English below.</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/dniminenn/sharkfin/actions/workflows/ci.yml"><img src="https://github.com/dniminenn/sharkfin/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/status-beta-blue" alt="beta" />
-  <img src="https://img.shields.io/badge/Rust-CE422B?logo=rust&logoColor=white" alt="Rust" />
+  <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Windows" />
   <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue" alt="GPL-3.0-or-later" />
 </p>
 
-![keymap editor](docs/keys-abyss.png)
+![灯效页](docs/images/lighting.jpg)
 
-Remap keys, set the RGB, record macros and change device settings on 1412
-keyboards built on ROYUAN hardware: Attack Shark, Hator, ikbc, NOPPOO,
-Epomaker, Akko, MEETION, rongyuan and more.
+原版驱动能做的它都能做，界面更清楚。另外加了一些原版没有的功能，放在「实验性功能」开关后面。
 
-**Use a USB cable.** Over a 2.4 GHz receiver sharkfin reads whatever the
-receiver relays: some carry the settings channel, some carry nothing, and
-the same model ships with both, so there is no per-board answer. Plug the
-receiver in and the app tells you which yours is. Writes need the cable:
-factory reset, display pictures and Setup. Bluetooth has no settings
-channel. sharkfin never flashes firmware.
+**不会刷固件。** 本软件只发送原版驱动也会发的设置命令，所有改动都能用原版驱动的「恢复默认」清除。
 
-**[Use it in a browser](https://app.getsharkfin.com/) ·
-[Download](https://github.com/dniminenn/sharkfin/releases) ·
-[Is my board supported?](docs/BOARDS.md)**
+## 功能
 
-By brand, with what each board has:
-[Attack Shark](https://getsharkfin.com/boards/attack-shark) ·
-[Akko](https://getsharkfin.com/boards/akko) ·
-[Epomaker](https://getsharkfin.com/boards/epomaker) ·
-[Hator](https://getsharkfin.com/boards/hator) ·
-[Kreo](https://getsharkfin.com/boards/kreo) ·
-[MageGee](https://getsharkfin.com/boards/magegee) ·
-[MonsGeek](https://getsharkfin.com/boards/monsgeek) ·
-[Royalaxe](https://getsharkfin.com/boards/royalaxe) ·
-[Skyloong](https://getsharkfin.com/boards/skyloong) ·
-[Womier](https://getsharkfin.com/boards/womier) ·
-[YUNZII](https://getsharkfin.com/boards/yunzii) ·
-[every brand](https://getsharkfin.com/boards/)
+| 功能 | 说明 |
+|---|---|
+| 灯效 | 18 种板载灯效，亮度、速度、颜色、方向；左侧动画预览，按键触发类灯效会跟着你敲键盘反应 |
+| 逐键灯光 | 给每个键单独上色，存进键盘 |
+| 音乐律动 | 律动 2、律动 3，竖立、分离、交叉三种样式 |
+| 屏幕光影 | 键盘跟随屏幕主色变化 |
+| 按键 | 改键，组合键，多媒体键，鼠标键（Fn 层改键还在排查，暂时不生效） |
+| 宏 | 录制按键，三种触发方式：按一下执行、按一下开/关、按住循环 |
+| 设备 | 防抖、无线休眠、Win 键锁、WASD 互换、配置档、恢复出厂 |
+| 设置 | 中文 / English，深色 / 浅色，托盘，开机启动，检查更新 |
 
-## Supported boards
+### 实验性功能
 
-**Beta, so back up first.**
+在「设置」里打开后出现。都还在测试中。
 
-1180 of 1412 accept changes, 228 more once the board itself has said which
-command set it speaks, 4 are read-only. 372 are drawn out of the box
-and 833 more after a one-time check against your board; the rest show a
-slot grid.
+| 功能 | 说明 |
+|---|---|
+| 键盘仪表 | 把键盘当小屏幕显示 CPU、内存、音量、倒计时 |
+| 旋钮 | 一键把旋钮设成音量、切歌、亮度、滚轮等 |
+| 按程序切换 | 打开指定程序时自动换灯效、锁 Win 键 |
+| 打字统计 | 按键热力图，只计次数，不记录内容，不上传 |
+| 回报率 | 125 / 250 / 500 / 1000 Hz（固件是否照做尚未确认） |
+| 备份与恢复 | 改键、灯效、防抖、休眠存成一个文件 |
+| 文字转宏 | 输入一段英文，生成会自动打字的宏 |
 
-The check exists because two boards can share one picture and still
-disagree about which slot each key lives in, and a wrong guess sends a
-remap to the wrong key. So sharkfin trusts your keyboard over its own
-files: the picture is matched against your board's keymap and stays
-read-only until you confirm it. A picture ships built in only when every
-board sharing it agrees.
+![按键页](docs/images/keys.jpg)
 
-Boards with magnetic switches get a Switches page: actuation and release
-point, rapid trigger and its sensitivities, dead zone, per key or for the
-whole board, the per-key kinds: dynamic keystroke, mod-tap, toggle and
-snap, with the keys they act on, and on boards that take more than one
-switch model, which one is fitted. Written only on boards whose own firmware
-has been read for it, which is the ry5088 lineage and the yc3121 magnetic
-lineage from firmware 2.00 today, and shown read-only elsewhere. Older
-yc3121 magnetic firmware takes settings but cannot report them; the page
-says so. By cable, the page can also show how far each key is pressed as
-you press it, set a key's actuation point from where you pressed it, take
-a rapid trigger step from how far you lift, and compare how deep every key
-bottoms out. Drawing a board, a key pressed on it names its slot.
+## 连接方式
 
-A board that is not in the list still works. sharkfin reads which command
-set it speaks off the board's own answers, says so, and asks before it
-writes anything. Send a report from the Contribute tab and it gets a real
-entry.
+| 连接 | 能做什么 |
+|---|---|
+| 数据线 | 全部功能 |
+| 2.4G 接收器 | 正在适配，还不能用；以后音乐律动、屏幕光影、恢复出厂仍需插线 |
+| 蓝牙 | 不能设置。键盘在蓝牙下不开放设置通道，原版驱动也一样 |
 
-If Setup cannot confirm that your original lighting was restored, it keeps
-the saved lighting and stops before further tests. **Check the lighting
-again** only reads the keyboard; Start over stays disabled until it matches.
+本软件和原版驱动不能同时打开。用之前先完全退出原版驱动，包括右下角托盘图标。
 
-If your board shows the grid, or the picture is wrong, draw it on the
-Keys page: start from a preset or the closest stored picture, and each key
-shows whether the board has it as you go. Sending the result back gets the
-board drawn for everyone who owns one.
+## 安装
 
-## Features
+还没有发布安装包，需要自己构建：
 
-- **Keys.** Remap any key, on a picture of your board, per profile. Base
-  and Fn layers, combos, and the knob (turn left, turn right, press). Writes
-  go to the keyboard immediately.
-- **Lighting.** The board's own effects, 18 on most, with direction options,
-  full RGB, brightness and speed. The page shows the effect running on a
-  picture of the board, timed from the firmware. Sliders preview as you
-  drag and write when you let go, because the keyboard keeps its lighting
-  in flash. Edge-light controls appear on boards
-  that have edge LEDs.
-- **Paint.** Colour individual keys, then send. Sending is manual and
-  rate-limited, because the pattern goes into the keyboard's flash.
-- **Macros.** Record key and mouse sequences with per-event delays into the
-  50 onboard slots, then bind a key to one: repeat, toggle, or while-held.
-- **Profiles.** Stored on the board. Most boards have four, some three or two.
-- **Backup.** Export everything to a file and restore it later.
-- **Device.** Debounce, Windows-key lock, WASD/arrow swap, backlight off,
-  host-OS auto-detect, sleep timeouts, factory reset, and the display's
-  clock on boards that have one.
-- **Colorways.** The whole app re-skins like a keycap set swap: Abyss,
-  Olivia, Laser, Botanical, 8008.
+1. 安装 [Node.js](https://nodejs.org/) 和 [Rust](https://rustup.rs/)。
+2. 下载本仓库，双击 `build-windows.bat`。
+3. 跑完会打开一个文件夹，双击里面的安装程序。
 
-![lighting, Olivia colorway](docs/lighting-olivia.png)
+## 出问题怎么办
 
-No cloud, no telemetry, no background services. The desktop app is one
-binary and works offline; the browser build is a static page that talks to
-nothing but your keyboard. There's no report-rate setting because this
-hardware doesn't have one.
+- 软件显示「键盘停止响应了」：拔掉数据线，等 10 秒再插回去。
+- 灯不亮或不听使唤：退出本软件，打开原版驱动，点「恢复默认」。
+- 找不到键盘：页面上点「生成诊断信息」，把结果贴到 [Issues](https://github.com/EvanRPG/Monka-A75-rebuild-/issues)。只读取，不写入键盘。
 
-## Install
+## 致谢与许可
 
-Nothing to install: open **[app.getsharkfin.com](https://app.getsharkfin.com/)**
-in Chrome, Edge or another Chromium browser and plug the keyboard in. The
-page reaches only the keyboard's settings channel and never sees your typing.
-It keeps working without a connection after the first visit, and the browser
-can install it as an app.
+本项目基于 [sharkfin](https://github.com/dniminenn/sharkfin)（JR Lanteigne，GPL-3.0-or-later）。与键盘通信的后端来自 sharkfin，在此基础上加了 A75 专用的功能，界面全部重写。协议说明见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
 
-For the desktop app, download a release or build it yourself:
+本项目同样以 [GPL-3.0-or-later](LICENSE) 发布。
 
-```sh
-cd app
-npm install
-npm run tauri build
-```
+本软件不是魔咖官方驱动，与厂商无关。「魔咖」「Monka」是其所有者的商标，这里只用来说明适用的键盘。
 
-The browser build needs the wasm toolchain
-(`rustup target add wasm32-unknown-unknown`, plus
-[wasm-pack](https://rustwasm.github.io/wasm-pack/)):
+作者：EvanRPG
 
-```sh
-cd app
-npm install
-npm run web:build   # -> app/dist-web
-```
+---
 
-On Linux the keyboard's device node belongs to root, so sharkfin needs a
-udev rule, browser build included. The .deb, .rpm and Arch packages
-install it; replug the keyboard after installing. For the AppImage or the
-browser, one line, then replug:
+<a id="english"></a>
 
-```sh
-echo 'SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151|0461|046a|05ac|0db0|145f|14a5|2ea8|3121|3299|331a|374a|379a|38a9|38ee|391d|3984|39a8|39ab|54ab", MODE="0660", TAG+="uaccess"' \
-  | sudo tee /etc/udev/rules.d/70-sharkfin.rules >/dev/null \
-  && sudo udevadm control --reload-rules && sudo udevadm trigger
-```
+## English
 
-A rule from VIA, Vial or a vendor package may already cover it. The app
-shows this command when it finds a keyboard it cannot open.
+An unofficial driver for the **Monka A75** tri-mode keyboard (firmware ID 1549, USB `3151:4015`, 2.4G receiver `3151:4011`). Chinese and English interface. Windows.
 
-On macOS, a board that keeps its settings on its keyboard interface, such
-as the Akko 3098B, needs Input Monitoring permission for sharkfin or for
-the browser. The app asks for it and can open the settings pane; enable
-it, then quit and reopen sharkfin.
+It never flashes firmware. It sends only the settings commands the original driver sends, and every change can be cleared with Restore defaults in the original driver.
 
-## If the keyboard stops responding
+**Features:** 18 onboard effects with a live preview, per-key colour, music sync (two modes, three styles), screen sync, key remapping (Fn layer remaps are still being investigated), macros, debounce, wireless sleep, profiles, factory reset.
 
-It happens: the firmware stops answering, and the app says the board needs a
-replug. Typing still works. In order:
+**Experimental** (turn on in Settings): keyboard meters (CPU, memory, volume, countdown), knob presets, per-app lighting, typing heatmap, report rate, backup and restore, text to macro.
 
-1. **Close sharkfin**, or the browser tab. While it's open it keeps trying to
-   reach the board.
-2. **Unplug the cable, wait ten seconds, plug it back in.** It needs to lose
-   power, not just reconnect.
-3. **Fn + Home** turns the lighting back on if the backlight is dead.
-4. **Fn + Esc**, held for about three seconds, resets the board's settings.
-5. Still wrong? Open sharkfin and use **Device, then Factory reset**.
+**Connection:** use the cable. 2.4G receiver support is still being worked on. Bluetooth has no settings channel.
 
-None of this touches firmware, and nothing here can leave the board
-unusable.
+**Install:** no release yet. Install Node.js and Rust, then run `build-windows.bat`.
 
-## Contributing
-
-Bugs and board reports both start in the app's **Contribute** tab, which
-collects a read-only data bundle to paste into an issue. Development setup
-is in [CONTRIBUTING.md](CONTRIBUTING.md); the wire protocol is in
-[docs/PROTOCOL.md](docs/PROTOCOL.md).
-
-## License
-
-GPL-3.0-or-later. Components redistributed inside the builds keep their own
-terms, listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
-
-sharkfin is an independent project, not affiliated with or endorsed by
-Attack Shark, ROYUAN or any keyboard brand.
+Built on [sharkfin](https://github.com/dniminenn/sharkfin) by JR Lanteigne. Licensed [GPL-3.0-or-later](LICENSE). Not affiliated with Monka; the name is used only to say which keyboard this is for.
