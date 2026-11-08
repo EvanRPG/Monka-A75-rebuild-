@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/status-beta-blue" alt="beta" />
+  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="1.0.0" />
   <img src="https://img.shields.io/badge/platform-Windows-0078d4" alt="Windows" />
   <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue" alt="GPL-3.0-or-later" />
 </p>
@@ -62,11 +62,9 @@
 
 ## 安装
 
-还没有发布安装包，需要自己构建：
+到 [Releases](https://github.com/EvanRPG/Monka-A75-rebuild-/releases/latest) 下载 `A75 Driver_*_x64-setup.exe`，双击安装。需要 Windows 10 或 11。
 
-1. 安装 [Node.js](https://nodejs.org/) 和 [Rust](https://rustup.rs/)。
-2. 下载本仓库，双击 `build-windows.bat`。
-3. 跑完会打开一个文件夹，双击里面的安装程序。
+想自己构建：安装 [Node.js](https://nodejs.org/) 和 [Rust](https://rustup.rs/)，下载本仓库，双击 `build-windows.bat`。
 
 ## 出问题怎么办
 
@@ -77,6 +75,11 @@
 ## 致谢与许可
 
 本项目基于 [sharkfin](https://github.com/dniminenn/sharkfin)（JR Lanteigne，GPL-3.0-or-later）。与键盘通信的后端来自 sharkfin，在此基础上加了 A75 专用的功能，界面全部重写。协议说明见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
+
+开发中得到了两个 AI 助手的帮助：
+
+- **Meta Muse**：早期的协议分析和原版驱动研究。
+- **Anthropic Claude**：后端扩展、界面、灯效预览和测试流程的编写。
 
 本项目同样以 [GPL-3.0-or-later](LICENSE) 发布。
 
@@ -100,6 +103,6 @@ It never flashes firmware. It sends only the settings commands the original driv
 
 **Connection:** use the cable. 2.4G receiver support is still being worked on. Bluetooth has no settings channel.
 
-**Install:** no release yet. Install Node.js and Rust, then run `build-windows.bat`.
+**Install:** download `A75 Driver_*_x64-setup.exe` from [Releases](https://github.com/EvanRPG/Monka-A75-rebuild-/releases/latest). Windows 10 or 11. To build it yourself, install Node.js and Rust and run `build-windows.bat`.
 
-Built on [sharkfin](https://github.com/dniminenn/sharkfin) by JR Lanteigne. Licensed [GPL-3.0-or-later](LICENSE). Not affiliated with Monka; the name is used only to say which keyboard this is for.
+Built on [sharkfin](https://github.com/dniminenn/sharkfin) by JR Lanteigne. Thanks to Meta Muse (early protocol research and vendor driver analysis) and Anthropic Claude (backend extensions, interface, effect previews, test process). Licensed [GPL-3.0-or-later](LICENSE). Not affiliated with Monka; the name is used only to say which keyboard this is for.

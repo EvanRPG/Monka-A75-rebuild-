@@ -1,5 +1,1 @@
 blank_issues_enabled: true
-contact_links:
-  - name: Is my keyboard supported?
-    url: https://github.com/dniminenn/sharkfin/blob/master/docs/BOARDS.md
-    about: Every known board, and what sharkfin can do with each.

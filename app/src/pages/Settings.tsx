@@ -15,7 +15,7 @@ export const REPO = "EvanRPG/Monka-A75-rebuild-";
 export const REPO_URL = `https://github.com/${REPO}`;
 const UPSTREAM_URL = "https://github.com/dniminenn/sharkfin";
 /** Shown in the browser preview; the desktop app reads its own. */
-const PREVIEW_VERSION = "0.3.0";
+const PREVIEW_VERSION = "1.0.0";
 
 function Card({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
