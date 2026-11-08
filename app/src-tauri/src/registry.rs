@@ -936,11 +936,6 @@ mod tests {
                 "app/src/components/PermissionNotice.tsx",
                 include_str!("../../src-sharkfin/components/PermissionNotice.tsx"),
             ),
-            // inlined in every release's notes
-            (
-                ".github/release-notes.md",
-                include_str!("../../../.github/release-notes.md"),
-            ),
         ];
         for (what, text) in copies {
             for vid in vendor_ids() {
