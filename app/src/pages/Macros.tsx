@@ -3,23 +3,12 @@ import { Section, Callout } from "@/components/parts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, type Macro, type MacroEvent } from "@/lib/backend";
-import { findFn } from "@/lib/keys";
+import { CODE, findFn } from "@/lib/keys";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/lib/store";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Circle, Save, Square, Trash2, Plus } from "lucide-react";
 
-const CODE: Record<string, number> = {
-  Enter: 40, Escape: 41, Backspace: 42, Tab: 43, Space: 44, Minus: 45, Equal: 46, BracketLeft: 47,
-  BracketRight: 48, Backslash: 49, Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54, Period: 55,
-  Slash: 56, CapsLock: 57, PrintScreen: 70, ScrollLock: 71, Pause: 72, Insert: 73, Home: 74,
-  PageUp: 75, Delete: 76, End: 77, PageDown: 78, ArrowRight: 79, ArrowLeft: 80, ArrowDown: 81,
-  ArrowUp: 82, ControlLeft: 224, ShiftLeft: 225, AltLeft: 226, MetaLeft: 227, ControlRight: 228,
-  ShiftRight: 229, AltRight: 230, MetaRight: 231,
-};
-for (let i = 0; i < 26; i++) CODE[`Key${String.fromCharCode(65 + i)}`] = 4 + i;
-for (let i = 1; i <= 9; i++) CODE[`Digit${i}`] = 29 + i;
-CODE.Digit0 = 39;
-for (let i = 1; i <= 12; i++) CODE[`F${i}`] = 57 + i;
 
 const usageName = (u: number) => findFn([0, 0, u, 0])?.label ?? `键码 ${u}`;
 
@@ -49,10 +38,11 @@ function phraseEvents(text: string): { events: MacroEvent[]; skipped: number } {
       continue;
     }
     const [u, shift] = k;
-    if (shift) events.push({ kind: "key", usage: 225, pressed: true, delayMs: 5 });
-    events.push({ kind: "key", usage: u, pressed: true, delayMs: 10 });
-    events.push({ kind: "key", usage: u, pressed: false, delayMs: 5 });
-    if (shift) events.push({ kind: "key", usage: 225, pressed: false, delayMs: 5 });
+    // Delays generous enough for slow apps and remote desktops to keep up.
+    if (shift) events.push({ kind: "key", usage: 225, pressed: true, delayMs: 15 });
+    events.push({ kind: "key", usage: u, pressed: true, delayMs: 20 });
+    events.push({ kind: "key", usage: u, pressed: false, delayMs: 15 });
+    if (shift) events.push({ kind: "key", usage: 225, pressed: false, delayMs: 15 });
   }
   return { events, skipped };
 }
@@ -60,6 +50,7 @@ function phraseEvents(text: string): { events: MacroEvent[]; skipped: number } {
 const SLOTS = 16;
 
 export default function Macros() {
+  const { experimental } = useApp();
   const [slot, setSlot] = useState(0);
   const [macro, setMacro] = useState<Macro>({ repeat: 1, events: [] });
   const [names, setNames] = useState<Record<number, number>>({});
@@ -109,8 +100,14 @@ export default function Macros() {
     setSaving(true);
     try {
       await api.writeMacro(slot, macro);
-      setNames((n) => ({ ...n, [slot]: macro.events.length }));
-      toast.success(`宏 ${slot + 1} 已保存到键盘`);
+      // Read it back: the toast should say what the board holds.
+      const back = await api.readMacro(slot);
+      setNames((n) => ({ ...n, [slot]: back.events.length }));
+      if (back.events.length !== macro.events.length) {
+        toast.error(`宏 ${slot + 1} 写入后读回不一致（写 ${macro.events.length} 步，读回 ${back.events.length} 步）`);
+      } else {
+        toast.success(`宏 ${slot + 1} 已保存到键盘`);
+      }
     } catch (e) {
       toast.error(`保存失败：${e}`);
     } finally {
@@ -210,22 +207,32 @@ export default function Macros() {
             <span className="tabular">单次约 {(total / 1000).toFixed(2)} 秒</span>
           </div>
         </Section>
-        <Section title="输入一段文字">
+        {experimental && <Section title="输入一段文字">
           <p className="text-xs leading-relaxed text-muted-foreground">把常用的邮箱、签名、指令变成宏，按一个键就自动打出来。只支持英文、数字和键盘上的符号（中文要靠输入法，宏打不出来）。</p>
-          <Input id="macro-phrase" value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="例如 evan@example.com" className="h-9" />
+          <Input id="macro-phrase" value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="在这里输入，比如你的邮箱" className="h-9" />
+          <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="ghost" disabled={recording} onClick={() => setPhrase("hello@example.com")}>
+            填入示例
+          </Button>
           <Button
             size="sm"
             variant="outline"
-            disabled={!phrase || recording}
+            disabled={!phrase.trim() || recording}
             onClick={() => {
               const { events, skipped } = phraseEvents(phrase);
+              if (events.length > 120) {
+                toast.error("文字太长，键盘的一个宏最多放大约 60 个字母");
+                return;
+              }
               setMacro((m) => ({ ...m, events }));
               if (skipped) toast.info(`有 ${skipped} 个字符不能用宏输入，已跳过`);
             }}
           >
             生成步骤（替换当前步骤）
           </Button>
-        </Section>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">生成后记得点上方「保存到键盘」，再到按键页绑定。使用时先把电脑输入法切到英文，否则字母会被输入法拦下。</p>
+        </Section>}
         <Section title="绑定到按键">
           <p className="text-[13px] leading-relaxed text-muted-foreground">保存后，到「按键」页选一个键，在「宏」分类里点「宏 {slot + 1}」。那里还能选触发方式：按一下执行、按一下开/关、按住循环。</p>
         </Section>

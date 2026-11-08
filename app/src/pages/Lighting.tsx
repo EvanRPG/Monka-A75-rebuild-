@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard } from "@/components/Keyboard";
 import { ColorSwatches, Section, Segmented, SliderRow, Workspace, Tag } from "@/components/parts";
-import { BRIGHTNESS_MAX, EFFECTS, SPEED_MAX, effectByMode, ledOf, type Effect } from "@/lib/a75";
-import { colorAt, type Rgb } from "@/lib/effects";
+import { BRIGHTNESS_MAX, EFFECTS, LIT_KEYS, SPEED_MAX, effectByMode, type Effect } from "@/lib/a75";
+import { CODE } from "@/lib/keys";
+import { REACTIVE, keyOfUsage, preview, type Press } from "@/lib/preview";
 import type { LedParam } from "@/lib/backend";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,24 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
   const { led, setLed } = useApp();
   const [draft, setDraft] = useState<LedParam | null>(led);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Presses for the reactive previews: typed on the keyboard or clicked. */
+  const presses = useRef<Press[]>([]);
+  const press = (key: number) => {
+    if (key < 0) return;
+    const list = presses.current;
+    list.push({ key, at: performance.now() });
+    if (list.length > 40) list.splice(0, list.length - 40);
+  };
+
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.repeat || (e.target as HTMLElement)?.tagName === "INPUT") return;
+      const u = CODE[e.code];
+      if (u) press(keyOfUsage(u));
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
 
   useEffect(() => {
     if (led && !draft) setDraft(led);
@@ -54,7 +73,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
       g: draft.g,
       b: draft.b,
     };
-    return (k: Parameters<typeof ledOf>[0], i: number, frame: number): Rgb => colorAt("yc500", p, ledOf(k), i, frame);
+    return preview(p, presses.current);
   }, [draft, effect]);
 
   if (!draft) return null;
@@ -71,7 +90,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
 
   return (
     <Workspace
-      stage={<Keyboard light={lightFn} showKnob={false} />}
+      stage={<Keyboard light={lightFn} showKnob={false} onKey={(k) => press(LIT_KEYS.indexOf(k))} />}
       below={
         <div className="flex flex-col gap-5">
           <div>
@@ -167,6 +186,11 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
               <p className="text-[13px] text-muted-foreground">这个灯效固定为七彩，不能选颜色。</p>
             )}
           </Section>
+          {REACTIVE.has(draft.mode) && (
+            <Section title="按键触发">
+              <p className="text-xs leading-relaxed text-muted-foreground">这个灯效跟着按键走。在这里敲键盘或点左边图上的键，预览会跟着变；不按时预览自己随机演示。</p>
+            </Section>
+          )}
           <Section title="说明">
             <p className="text-xs leading-relaxed text-muted-foreground">
               点选立即写入键盘，滑块松手后写入。左侧预览是示意，实际效果以键盘为准。Fn 键的灯用来显示充电和配对状态，不跟随灯效。

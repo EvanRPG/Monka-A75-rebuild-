@@ -310,20 +310,23 @@ impl Meters {
     fn levels(&mut self, p: &MusicParams) -> [u8; BANDS] {
         match p.source.as_str() {
             "cpu" => {
+                // Sampled four times a second, shown as the mean of the last
+                // second: steady enough to read, quick enough to follow.
                 if self.cpu_at.elapsed() >= Duration::from_millis(250) {
                     self.cpu_at = Instant::now();
                     self.sys.refresh_cpu_usage();
                     self.cpu.push_back(self.sys.global_cpu_usage() / 100.0);
-                    while self.cpu.len() > BANDS {
+                    while self.cpu.len() > 4 {
                         self.cpu.pop_front();
                     }
                 }
-                music::graph_levels(&self.cpu)
+                let n = self.cpu.len().max(1) as f32;
+                music::height_levels(self.cpu.iter().sum::<f32>() / n)
             }
             "ram" => {
                 self.sys.refresh_memory();
                 let total = self.sys.total_memory().max(1) as f32;
-                music::fill_levels(self.sys.used_memory() as f32 / total)
+                music::height_levels(self.sys.used_memory() as f32 / total)
             }
             "volume" => {
                 self.poll_volume();
@@ -336,7 +339,7 @@ impl Meters {
                 let total = p.timer_secs.max(1) as f32;
                 let left = 1.0 - self.timer.1.elapsed().as_secs_f32() / total;
                 if left > 0.0 {
-                    music::fill_levels(left)
+                    music::height_levels(left)
                 } else if (self.timer.1.elapsed().as_millis() / 500).is_multiple_of(2) {
                     // Time's up: the whole board blinks until stopped.
                     [music::LEVEL_MAX; BANDS]
@@ -566,32 +569,45 @@ fn start_rules_watcher(app: AppHandle) {
             .ok()
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_lowercase()));
         let mut last_exe = String::new();
+        // Rules as last applied: a change re-checks the program in front, so
+        // a rule added for the program already in use applies at once.
+        let mut last_rules = String::new();
         // The look before the first rule kicked in, restored afterwards.
         let mut base: Option<(LedParam, bool)> = None;
         let mut applied: Option<String> = None;
         loop {
             std::thread::sleep(Duration::from_secs(1));
             let Some(exe) = win::foreground_exe() else { continue };
-            if Some(&exe) == own.as_ref() || exe == last_exe {
+            let p = prefs(&app);
+            let rules_key = serde_json::to_string(&(p.rules_enabled, &p.rules)).unwrap_or_default();
+            if exe == last_exe && rules_key == last_rules {
                 continue;
             }
-            last_exe = exe.clone();
-            {
-                let ex = app.state::<Extras>();
-                let mut recent = ex.recent.lock();
-                recent.retain(|e| e != &exe);
-                recent.push_front(exe.clone());
-                recent.truncate(12);
+            last_rules = rules_key;
+            if exe != last_exe {
+                last_exe = exe.clone();
+                // This app counts as a program without a rule (so the look
+                // comes back while you edit), but is not offered as one.
+                if Some(&exe) != own.as_ref() {
+                    let ex = app.state::<Extras>();
+                    let mut recent = ex.recent.lock();
+                    recent.retain(|e| e != &exe);
+                    recent.push_front(exe.clone());
+                    recent.truncate(12);
+                }
             }
-            let p = prefs(&app);
-            if !p.rules_enabled || live_running(&app) {
+            if live_running(&app) {
                 continue;
             }
             let state = app.state::<AppState>();
             if !matches!(open_board(&state), Some((A75_ID, _))) {
                 continue;
             }
-            let rule = p.rules.iter().find(|r| r.exe.eq_ignore_ascii_case(&exe)).cloned();
+            let rule = if p.rules_enabled {
+                p.rules.iter().find(|r| r.exe.eq_ignore_ascii_case(&exe)).cloned()
+            } else {
+                None
+            };
             match (rule, applied.clone()) {
                 (Some(r), cur) if cur.as_deref() != Some(&r.exe.to_lowercase()) => {
                     if base.is_none() {

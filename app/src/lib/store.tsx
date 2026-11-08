@@ -24,6 +24,9 @@ interface AppState {
   startLive: (p: MusicParams) => Promise<void>;
   updateLive: (p: MusicParams) => void;
   stopLive: () => Promise<void>;
+  /** Features beyond the vendor driver's are shown only when this is on. */
+  experimental: boolean;
+  setExperimental: (on: boolean) => void;
 }
 
 const IDLE: MusicStatus = { running: false, source: null, levels: new Array(32).fill(0) };
@@ -38,6 +41,14 @@ function readTheme(): ThemeChoice {
     /* storage unavailable */
   }
   return "dark";
+}
+
+function readExperimental(): boolean {
+  try {
+    return localStorage.getItem("a75.experimental") === "1";
+  } catch {
+    return false;
+  }
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -144,6 +155,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLedState(await api.getLedParam().catch(() => null));
   }, []);
 
+  const [experimental, setExperimentalState] = useState(readExperimental);
+  const setExperimental = useCallback(
+    (on: boolean) => {
+      setExperimentalState(on);
+      try {
+        localStorage.setItem("a75.experimental", on ? "1" : "0");
+      } catch {
+        /* storage unavailable */
+      }
+      if (on) return;
+      // Hidden features stop too, so nothing runs that the window no longer shows.
+      if (live.running && liveParams && !["music", "screen"].includes(liveParams.source)) stopLive().catch(() => {});
+      api
+        .getPrefs()
+        .then((p) => (p.rulesEnabled || p.statsEnabled ? api.setPrefs({ ...p, rulesEnabled: false, statsEnabled: false }) : undefined))
+        .catch(() => {});
+    },
+    [live.running, liveParams, stopLive],
+  );
+
   const setLed = useCallback(async (p: LedParam) => {
     setLedState(p);
     await api.setLedParam(p);
@@ -167,8 +198,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       startLive,
       updateLive,
       stopLive,
+      experimental,
+      setExperimental,
     }),
-    [device, scanning, scanNote, rescan, led, setLed, theme, dark, profile, setProfile, live, liveParams, startLive, updateLive, stopLive],
+    [device, scanning, scanNote, rescan, led, setLed, theme, dark, profile, setProfile, live, liveParams, startLive, updateLive, stopLive, experimental, setExperimental],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

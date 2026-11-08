@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard } from "@/components/Keyboard";
 import { LiveBars } from "@/components/LiveBars";
-import { Callout, Section, Segmented, SliderRow, Tag, Workspace } from "@/components/parts";
+import { Callout, Section, Segmented, SliderRow, Workspace } from "@/components/parts";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { IS_DESKTOP, type MusicParams } from "@/lib/backend";
@@ -11,7 +11,9 @@ import { toast } from "sonner";
 import { Play, Square, Volume2 } from "lucide-react";
 
 export default function Music() {
-  const { live, liveParams, startLive, updateLive, stopLive } = useApp();
+  const { live, liveParams, startLive, updateLive, stopLive, experimental } = useApp();
+  /** Without experimental features the stream behaves like the vendor's. */
+  const eff = (p: MusicParams): MusicParams => (experimental ? p : { ...p, algo: 1, volumeOverlay: false });
   const [params, setParams] = useState<MusicParams>(() =>
     liveParams?.source === "music" ? liveParams : { ...LIVE_DEFAULTS, ...(liveParams ?? {}), source: "music" },
   );
@@ -24,19 +26,19 @@ export default function Music() {
 
   // The demo has no real keyboard to protect: start it so the page shows something.
   useEffect(() => {
-    if (!IS_DESKTOP && !live.running) startLive({ ...params, source: "music" }).catch(() => {});
+    if (!IS_DESKTOP && !live.running) startLive(eff({ ...params, source: "music" })).catch(() => {});
   }, []);
 
   const change = (p: MusicParams) => {
     setParams(p);
-    if (running) updateLive(p);
+    if (running) updateLive(eff(p));
   };
 
   const toggle = async () => {
     setBusy(true);
     try {
       if (running) await stopLive();
-      else await startLive({ ...params, source: "music" });
+      else await startLive(eff({ ...params, source: "music" }));
     } catch (e) {
       toast.error(`${running ? "停止" : "启动"}失败：${e}`);
     } finally {
@@ -55,7 +57,6 @@ export default function Music() {
           <div className="flex flex-col gap-3 px-5 pt-5 pb-4">
             <div className="flex items-center gap-2">
               <span className="text-lg font-semibold">音乐律动</span>
-              <Tag tone="warn">实验功能</Tag>
             </div>
             <Button onClick={toggle} disabled={busy} variant={running ? "secondary" : "default"} className="h-10 w-full">
               {running ? <Square /> : <Play />}
@@ -82,7 +83,21 @@ export default function Music() {
               原版驱动的两种音乐模式，用的是同一份频谱数据，由键盘用各自的方式画出来。
             </p>
           </Section>
-          <Section title="频谱算法">
+          <Section title="样式">
+            <Segmented
+              id="music-style"
+              className="w-full"
+              value={params.style}
+              options={[
+                [0, "竖立"],
+                [1, "分离"],
+                [2, "交叉"],
+              ]}
+              onChange={(v) => change({ ...params, style: v, algo: v === 0 ? params.algo : 1 })}
+            />
+            {experimental && params.style !== 0 && <p className="text-xs leading-relaxed text-muted-foreground">分离和交叉固定用原版的频谱算法，效果和原版驱动一致。</p>}
+          </Section>
+          {experimental && params.style === 0 && <Section title="频谱算法">
             <Segmented
               id="music-algo"
               className="w-full"
@@ -98,20 +113,9 @@ export default function Music() {
                 ? "从低音到高音覆盖全频段，下面的参数都能调。"
                 : "照搬原版：只看中频（约 630 到 1400 Hz），每帧把最响的一段拉满。灵敏度、门限和低音加权对它不起作用。"}
             </p>
-          </Section>
-          <Section title="样式">
-            <Segmented
-              id="music-style"
-              className="w-full"
-              value={params.style}
-              options={[
-                [0, "竖立"],
-                [1, "分离"],
-                [2, "交叉"],
-              ]}
-              onChange={(v) => change({ ...params, style: v })}
-            />
-          </Section>
+          </Section>}
+          {experimental && (
+            <>
           <Section
             title="调节"
             aside={
@@ -133,6 +137,8 @@ export default function Music() {
             </label>
             <p className="text-xs leading-relaxed text-muted-foreground">律动时调音量，键盘会用 1.5 秒显示一条从左到右的音量条，然后回到律动。</p>
           </Section>
+            </>
+          )}
           <Section title="注意">
             <Callout tone="warn">
               需要插着线使用。切到别的页面律动会继续，顶栏可以随时停止。停止后会恢复原来的灯效；万一灯不亮，用原版魔咖驱动点「恢复默认」即可恢复。

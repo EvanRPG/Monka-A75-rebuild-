@@ -21,6 +21,7 @@ import {
   Moon,
   Radio,
   SlidersHorizontal,
+  Settings2,
   Sun,
 } from "lucide-react";
 import Lighting from "@/pages/Lighting";
@@ -34,6 +35,7 @@ import Meters from "@/pages/Meters";
 import Knob from "@/pages/Knob";
 import Rules from "@/pages/Rules";
 import Stats from "@/pages/Stats";
+import Settings from "@/pages/Settings";
 import { api } from "@/lib/backend";
 
 export type PageId =
@@ -47,7 +49,8 @@ export type PageId =
   | "macros"
   | "rules"
   | "stats"
-  | "device";
+  | "device"
+  | "settings";
 
 interface PageDef {
   id: PageId;
@@ -55,6 +58,8 @@ interface PageDef {
   desc: string;
   icon: ComponentType<{ className?: string }>;
   group: "灯光" | "按键" | "智能" | "设备";
+  /** Beyond the vendor driver: shown with experimental features on. */
+  exp?: boolean;
 }
 
 const PAGES: PageDef[] = [
@@ -62,13 +67,14 @@ const PAGES: PageDef[] = [
   { id: "paint", name: "逐键灯光", desc: "给每个键单独上色，存进键盘", icon: Brush, group: "灯光" },
   { id: "music", name: "音乐律动", desc: "电脑分析声音，键盘跟着节奏亮", icon: AudioLines, group: "灯光" },
   { id: "screen", name: "屏幕光影", desc: "键盘跟随屏幕主色变化", icon: Monitor, group: "灯光" },
-  { id: "meters", name: "键盘仪表", desc: "把键盘当小屏幕：CPU、内存、音量、倒计时", icon: Gauge, group: "灯光" },
+  { id: "meters", name: "键盘仪表", desc: "把键盘当小屏幕：CPU、内存、音量、倒计时", icon: Gauge, group: "灯光", exp: true },
   { id: "keys", name: "按键", desc: "改键和 Fn 层", icon: KeyboardIcon, group: "按键" },
-  { id: "knob", name: "旋钮", desc: "左转、右转、按下各做什么", icon: RotateCw, group: "按键" },
+  { id: "knob", name: "旋钮", desc: "左转、右转、按下各做什么", icon: RotateCw, group: "按键", exp: true },
   { id: "macros", name: "宏", desc: "录制一串按键，绑定到任意键", icon: ListVideo, group: "按键" },
-  { id: "rules", name: "按程序切换", desc: "打开指定程序时自动换灯效、锁 Win 键", icon: AppWindow, group: "智能" },
-  { id: "stats", name: "打字统计", desc: "按键热力图和打字速度", icon: BarChart3, group: "智能" },
-  { id: "device", name: "设备", desc: "回报率、防抖、休眠、恢复出厂", icon: SlidersHorizontal, group: "设备" },
+  { id: "rules", name: "按程序切换", desc: "打开指定程序时自动换灯效、锁 Win 键", icon: AppWindow, group: "智能", exp: true },
+  { id: "stats", name: "打字统计", desc: "按键热力图和打字速度", icon: BarChart3, group: "智能", exp: true },
+  { id: "device", name: "设备", desc: "防抖、休眠、配置档、恢复出厂", icon: SlidersHorizontal, group: "设备" },
+  { id: "settings", name: "设置", desc: "语言、外观、实验性功能、关于", icon: Settings2, group: "设备" },
 ];
 
 function readHash(): PageId {
@@ -77,7 +83,7 @@ function readHash(): PageId {
 }
 
 function Shell() {
-  const { device, scanning, scanNote, setTheme, dark } = useApp();
+  const { device, scanning, scanNote, setTheme, dark, experimental } = useApp();
   const [page, setPage] = useState<PageId>(readHash);
 
   useEffect(() => {
@@ -95,7 +101,12 @@ function Shell() {
     }
   };
 
-  const def = PAGES.find((p) => p.id === page)!;
+  const shown = PAGES.filter((p) => experimental || !p.exp);
+  // A hidden page (experimental turned off) falls back to the first one.
+  const def = shown.find((p) => p.id === page) ?? shown[0];
+  useEffect(() => {
+    if (def.id !== page) go(def.id);
+  }, [def.id, page]);
   const groups = ["灯光", "按键", "智能", "设备"] as const;
 
   return (
@@ -109,10 +120,10 @@ function Shell() {
           </div>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-1 md:flex-col md:gap-0 md:overflow-visible md:pb-0">
-          {groups.map((g) => (
+          {groups.filter((g) => shown.some((p) => p.group === g)).map((g) => (
             <div key={g} className="contents md:mb-3 md:block">
               <div className="hidden px-2.5 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground md:block">{g}</div>
-              {PAGES.filter((p) => p.group === g).map((p) => {
+              {shown.filter((p) => p.group === g).map((p) => {
                 const Icon = p.icon;
                 const on = p.id === page;
                 return (
@@ -159,8 +170,8 @@ function Shell() {
             {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </button>
         </header>
-        {device ? (
-          <PageView page={page} go={go} />
+        {device || def.id === "settings" ? (
+          <PageView page={def.id} go={go} />
         ) : (
           <div className="grid flex-1 place-items-center p-8 text-center">
             <div className="max-w-sm">
@@ -218,6 +229,8 @@ function PageView({ page, go }: { page: PageId; go: (p: PageId) => void }) {
       return <Rules />;
     case "stats":
       return <Stats />;
+    case "settings":
+      return <Settings />;
   }
 }
 

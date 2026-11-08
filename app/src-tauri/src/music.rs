@@ -135,7 +135,9 @@ impl Analyzer {
     /// Levels for the newest `FFT_N` samples (mono, -1..1). Fewer samples
     /// are zero-padded at the front.
     pub fn levels(&mut self, samples: &[f32], p: &MusicParams) -> [u8; BANDS] {
-        if p.algo == 1 {
+        // Separate and intersect only look right with the vendor's levels
+        // (owner's test, v0.2.1), so those styles always take them.
+        if p.algo == 1 || p.style != 0 {
             let raw = self.vendor_levels(samples);
             return self.finish(raw.map(|v| v as f32), p);
         }
@@ -231,12 +233,20 @@ pub fn fill_levels(f: f32) -> [u8; BANDS] {
     out
 }
 
-/// A scrolling graph: oldest sample on the left, each 0..1.
-pub fn graph_levels(history: &VecDeque<f32>) -> [u8; BANDS] {
+/// One reading as a bar height on every band: the whole board fills up to a
+/// row. The board does not show all 32 bands left to right (a width fill
+/// changed nothing on screen for its first half), so meters that need to
+/// read correctly use height. The fraction between two rows lifts an even
+/// spread of bands one row higher, so slow changes still show.
+pub fn height_levels(f: f32) -> [u8; BANDS] {
+    let h = f.clamp(0.0, 1.0) * LEVEL_MAX as f32;
+    let base = h.floor();
+    let frac = h - base;
     let mut out = [0u8; BANDS];
-    let skip = BANDS.saturating_sub(history.len());
-    for (o, v) in out.iter_mut().skip(skip).zip(history.iter().rev().take(BANDS).rev()) {
-        *o = (v.clamp(0.0, 1.0) * LEVEL_MAX as f32).round() as u8;
+    for (i, o) in out.iter_mut().enumerate() {
+        // Golden-ratio spread: any fraction lifts bands across the board.
+        let rank = (i as f32 * 0.618_034).fract();
+        *o = (base + if rank < frac { 1.0 } else { 0.0 }).min(LEVEL_MAX as f32) as u8;
     }
     out
 }
@@ -384,14 +394,23 @@ mod tests {
     }
 
     #[test]
-    fn fill_and_graph_shapes() {
+    fn fill_shapes() {
         assert_eq!(fill_levels(0.0), [0; BANDS]);
         assert_eq!(fill_levels(1.0), [LEVEL_MAX; BANDS]);
         let half = fill_levels(0.5);
         assert!(half[..16].iter().all(|&l| l == 6) && half[16..].iter().all(|&l| l == 0));
-        let h: VecDeque<f32> = vec![1.0, 0.0].into();
-        let g = graph_levels(&h);
-        assert_eq!((g[30], g[31]), (6, 0));
+    }
+
+    #[test]
+    fn height_fills_rows_and_spreads_the_fraction() {
+        assert_eq!(height_levels(0.0), [0; BANDS]);
+        assert_eq!(height_levels(1.0), [LEVEL_MAX; BANDS]);
+        assert_eq!(height_levels(0.5), [3; BANDS]);
+        // Half a row up from 3: about half the bands show 4, spread out.
+        let h = height_levels(3.5 / 6.0);
+        let up = h.iter().filter(|&&l| l == 4).count();
+        assert!((12..=20).contains(&up), "{h:?}");
+        assert!(h[..16].contains(&4) && h[16..].contains(&4));
     }
 
     #[test]

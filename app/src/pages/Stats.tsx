@@ -35,6 +35,8 @@ export default function Stats() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [writing, setWriting] = useState(false);
+  /** When the switch last turned on: the listener needs a moment to start. */
+  const [enabledAt, setEnabledAt] = useState(0);
 
   useEffect(() => {
     api.getPrefs().then(setPrefs).catch(() => {});
@@ -63,6 +65,7 @@ export default function Stats() {
     if (!prefs) return;
     const p = { ...prefs, statsEnabled: on };
     setPrefs(p);
+    if (on) setEnabledAt(Date.now());
     await api.setPrefs(p).catch((e) => toast.error(`保存失败：${e}`));
     setStats(await api.getStats());
   };
@@ -128,7 +131,7 @@ export default function Stats() {
               记录按键次数
               <Switch id="stats-on" checked={!!prefs?.statsEnabled} onCheckedChange={toggle} />
             </label>
-            {prefs?.statsEnabled && stats && !stats.active && <p className="text-xs text-destructive">计数没有启动：这台电脑不允许软件监听按键。</p>}
+            {prefs?.statsEnabled && stats && !stats.active && Date.now() - enabledAt > 4000 && <p className="text-xs text-destructive">计数没有启动：这台电脑不允许软件监听按键。</p>}
           </div>
           <Section title="隐私">
             <Callout>只数每个键按了几次，不记录你打了什么字，也不记录顺序。数据只存在这台电脑上，不会上传。关掉开关就停止记录。</Callout>

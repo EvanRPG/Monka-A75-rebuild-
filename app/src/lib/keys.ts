@@ -153,7 +153,6 @@ export const GROUPS: KeyGroup[] = [
       { label: "查看电量", cap: "电量", entry: [10, 8, 0, 0] },
       { label: "省电模式", cap: "省电", entry: [10, 12, 0, 0] },
       { label: "恢复出厂", cap: "复位", entry: [10, 2, 0, 0] },
-      { label: "充电指示灯开关（实验）", cap: "充电灯", entry: [10, 22, 0, 0] },
     ],
   },
   {
@@ -206,3 +205,17 @@ export function capText(entry: number[], fnLayer = false): string {
 }
 
 export const sameEntry = same;
+
+/** Browser KeyboardEvent.code to HID usage, for the keys the A75 has. */
+export const CODE: Record<string, number> = {
+  Enter: 40, Escape: 41, Backspace: 42, Tab: 43, Space: 44, Minus: 45, Equal: 46, BracketLeft: 47,
+  BracketRight: 48, Backslash: 49, Semicolon: 51, Quote: 52, Backquote: 53, Comma: 54, Period: 55,
+  Slash: 56, CapsLock: 57, PrintScreen: 70, ScrollLock: 71, Pause: 72, Insert: 73, Home: 74,
+  PageUp: 75, Delete: 76, End: 77, PageDown: 78, ArrowRight: 79, ArrowLeft: 80, ArrowDown: 81,
+  ArrowUp: 82, ControlLeft: 224, ShiftLeft: 225, AltLeft: 226, MetaLeft: 227, ControlRight: 228,
+  ShiftRight: 229, AltRight: 230, MetaRight: 231,
+};
+for (let i = 0; i < 26; i++) CODE[`Key${String.fromCharCode(65 + i)}`] = 4 + i;
+for (let i = 1; i <= 9; i++) CODE[`Digit${i}`] = 29 + i;
+CODE.Digit0 = 39;
+for (let i = 1; i <= 12; i++) CODE[`F${i}`] = 57 + i;
