@@ -38,7 +38,7 @@ export const EN: Record<string, string> = {
   "拔掉数据线，等 10 秒再插回去，这里会自动重新连接。键盘不会损坏。": "Unplug the cable, wait 10 seconds and plug it back in. This page reconnects by itself. The keyboard will not be harmed.",
   "接收器插着，但键盘没醒。按一下键盘上的任意键就能唤醒。": "The receiver is plugged in, but the keyboard is asleep. Press any key to wake it.",
   "先完全退出原版魔咖驱动（包括右下角托盘图标），两个软件不能同时打开。": "Fully quit the original Monka driver first (including its tray icon). The two programs cannot run at the same time.",
-  "用数据线把 A75 接到电脑上，或插好 2.4G 接收器并按任意键唤醒键盘。先关掉原版魔咖驱动，两个软件不能同时打开。": "Connect the A75 with a USB cable, or plug in the 2.4G receiver and press any key to wake the keyboard. Close the original Monka driver first; the two programs cannot run at the same time.",
+  "用数据线把 A75 接到电脑上，或插好 2.4G 接收器并按任意键唤醒键盘。先关掉原版魔咖驱动，两个软件不能同时打开。蓝牙模式下无法设置：键盘在蓝牙下不开放设置通道，原版驱动也一样。": "Connect the A75 with a USB cable, or plug in the 2.4G receiver and press any key to wake the keyboard. Close the original Monka driver first; the two programs cannot run at the same time. Bluetooth cannot be used for settings: the keyboard opens no settings channel over Bluetooth, and the original driver cannot use it either.",
   "CPU 仪表": "CPU meter",
   "内存仪表": "Memory meter",
   "音量仪表": "Volume meter",
