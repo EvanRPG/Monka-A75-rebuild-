@@ -132,7 +132,7 @@ export default function Device() {
             <Info k="设备编号" v={String(device?.deviceId ?? "—")} mono />
             <Info k="方案代号" v="s75 · yc500 族" mono />
           </dl>
-          {wired && <Callout>电量只能在 2.4G 下读到：键盘本身不报电量，是接收器转报的。插线时看 Fn 键的灯：蓝色常亮表示正在充电，绿色表示已充满。</Callout>}
+          {wired && <Callout>电量只能在 2.4G 下读到：键盘本身不报电量，是接收器转报的。插线时看 Fn 键的灯：蓝灯闪烁表示正在充电，绿灯常亮表示已充满。</Callout>}
         </Card>
 
         <Card title="回报率" aside={<Tag tone={readBack ? "warn" : "muted"}>{readBack ? "待验证" : "不可用"}</Tag>}>
