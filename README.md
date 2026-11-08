@@ -55,7 +55,7 @@
 | 连接 | 能做什么 |
 |---|---|
 | 数据线 | 全部功能 |
-| 2.4G 接收器 | 正在适配，还不能用；以后音乐律动、屏幕光影、恢复出厂仍需插线 |
+| 2.4G 接收器 | 大部分设置；音乐律动、屏幕光影、恢复出厂需要插线 |
 | 蓝牙 | 不能设置。键盘在蓝牙下不开放设置通道，原版驱动也一样 |
 
 本软件和原版驱动不能同时打开。用之前先完全退出原版驱动，包括右下角托盘图标。
@@ -101,7 +101,7 @@ It never flashes firmware. It sends only the settings commands the original driv
 
 **Experimental** (turn on in Settings): keyboard meters (CPU, memory, volume, countdown), knob presets, per-app lighting, typing heatmap, report rate, backup and restore, text to macro.
 
-**Connection:** use the cable. 2.4G receiver support is still being worked on. Bluetooth has no settings channel.
+**Connection:** everything works over the cable; most settings work over the 2.4G receiver (music sync, screen sync and factory reset need the cable); Bluetooth has no settings channel.
 
 **Install:** download `A75 Driver_*_x64-setup.exe` from [Releases](https://github.com/EvanRPG/Monka-A75-rebuild-/releases/latest). Windows 10 or 11. To build it yourself, install Node.js and Rust and run `build-windows.bat`.
 
