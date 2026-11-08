@@ -1,140 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard } from "@/components/Keyboard";
+import { LiveBars } from "@/components/LiveBars";
 import { Callout, Section, Segmented, SliderRow, Tag, Workspace } from "@/components/parts";
 import { Button } from "@/components/ui/button";
-import { LIT_KEYS, type KeyCap } from "@/lib/a75";
-import { api, IS_DESKTOP, type MusicParams, type MusicStatus } from "@/lib/backend";
+import { Switch } from "@/components/ui/switch";
+import { IS_DESKTOP, type MusicParams } from "@/lib/backend";
+import { LIVE_DEFAULTS, levelsLight } from "@/lib/live";
+import { useApp } from "@/lib/store";
 import { toast } from "sonner";
 import { Play, Square, Volume2 } from "lucide-react";
-import type { Rgb } from "@/lib/effects";
-
-const DEFAULTS: MusicParams = { mode: 22, style: 0, algo: 0, gain: 55, gate: 12, decay: 45, bass: 30, spread: 25 };
-
-const X0 = Math.min(...LIT_KEYS.map((k) => k.x));
-const X1 = Math.max(...LIT_KEYS.map((k) => k.x + k.w));
-const ROWS = [...new Set(LIT_KEYS.map((k) => k.y))].sort((a, b) => a - b);
-
-function bandOf(k: KeyCap) {
-  return Math.min(31, Math.floor((((k.x + k.w / 2) - X0) / (X1 - X0)) * 32));
-}
-function rowOf(k: KeyCap) {
-  return ROWS.indexOf(k.y);
-}
-function hue(t: number): Rgb {
-  const f = (n: number) => {
-    const k = (n + t * 6) % 6;
-    return Math.round(255 * (1 - Math.max(0, Math.min(k, 4 - k, 1))));
-  };
-  return [f(5), f(3), f(1)];
-}
 
 export default function Music() {
-  const [params, setParams] = useState<MusicParams>(DEFAULTS);
-  const [status, setStatus] = useState<MusicStatus>({ running: false, source: null, levels: new Array(32).fill(0) });
+  const { live, liveParams, startLive, updateLive, stopLive } = useApp();
+  const [params, setParams] = useState<MusicParams>(() =>
+    liveParams?.source === "music" ? liveParams : { ...LIVE_DEFAULTS, ...(liveParams ?? {}), source: "music" },
+  );
   const [busy, setBusy] = useState(false);
-  const levels = useRef(status.levels);
-  levels.current = status.levels;
+  const running = live.running && liveParams?.source === "music";
+  const levels = useRef(live.levels);
+  levels.current = live.levels;
   const style = useRef(params.style);
   style.current = params.style;
 
-  // Read back what was actually sent, ~30 times a second while running.
-  useEffect(() => {
-    if (!status.running) return;
-    let alive = true;
-    const tick = () => {
-      api
-        .musicStatus()
-        .then((s) => alive && setStatus(s))
-        .catch(() => {});
-    };
-    const t = setInterval(tick, 33);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [status.running]);
-
-  // Leaving the page stops the stream, so the keyboard is never left in music mode.
-  useEffect(() => () => void api.musicStop().catch(() => {}), []);
-
   // The demo has no real keyboard to protect: start it so the page shows something.
   useEffect(() => {
-    if (IS_DESKTOP) return;
-    api.musicStart(DEFAULTS).then(() => api.musicStatus()).then(setStatus).catch(() => {});
+    if (!IS_DESKTOP && !live.running) startLive({ ...params, source: "music" }).catch(() => {});
   }, []);
 
   const change = (p: MusicParams) => {
     setParams(p);
-    if (status.running) api.musicParams(p).catch(() => {});
+    if (running) updateLive(p);
   };
 
   const toggle = async () => {
     setBusy(true);
     try {
-      if (status.running) {
-        await api.musicStop();
-        setStatus({ running: false, source: null, levels: new Array(32).fill(0) });
-      } else {
-        await api.musicStart(params);
-        setStatus(await api.musicStatus());
-      }
+      if (running) await stopLive();
+      else await startLive({ ...params, source: "music" });
     } catch (e) {
-      toast.error(`${status.running ? "停止" : "启动"}失败：${e}`);
+      toast.error(`${running ? "停止" : "启动"}失败：${e}`);
     } finally {
       setBusy(false);
     }
   };
 
-  const light = useMemo(
-    () => (k: KeyCap) => {
-      const b = bandOf(k);
-      const L = levels.current[b] ?? 0;
-      const r = rowOf(k); // 0 = top row, 5 = bottom row
-      let on = false;
-      if (style.current === 0) on = 5 - r < L;
-      else if (style.current === 1) on = Math.abs(r - 2.5) < L / 2;
-      else on = b % 2 === 0 ? 5 - r < L : r < L;
-      return on ? hue(b / 32) : null;
-    },
-    [],
-  );
-
-  const peak = Math.max(...status.levels);
+  const light = useMemo(() => levelsLight(() => levels.current, () => style.current), []);
 
   return (
     <Workspace
-      stage={<Keyboard light={status.running ? light : null} showKnob={false} />}
-      below={
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-[13px] font-semibold">发往键盘的电平</h3>
-              <span className="text-xs text-muted-foreground">32 段，每段 0 到 6 级，每秒 32 帧</span>
-            </div>
-            <span className="tabular font-mono text-xs text-muted-foreground">峰值 {peak} / 6</span>
-          </div>
-          <div className="flex h-28 items-end gap-[3px]" aria-label="频谱">
-            {status.levels.map((v, i) => (
-              <div key={i} className="flex h-full flex-1 flex-col-reverse gap-[2px]">
-                {Array.from({ length: 6 }, (_, j) => (
-                  <div
-                    key={j}
-                    className="flex-1 rounded-[2px] transition-colors duration-75"
-                    style={{
-                      background: j < v ? `rgb(${hue(i / 32).join(",")})` : "var(--muted)",
-                    }}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex justify-between text-[11px] text-muted-foreground">
-            <span>低音</span>
-            <span>中音</span>
-            <span>高音</span>
-          </div>
-        </div>
-      }
+      stage={<Keyboard light={running ? light : null} showKnob={false} />}
+      below={<LiveBars levels={running ? live.levels : new Array(32).fill(0)} title="发往键盘的电平" note="32 段，每段 0 到 6 级，每秒 32 帧" />}
       panel={
         <>
           <div className="flex flex-col gap-3 px-5 pt-5 pb-4">
@@ -142,15 +57,15 @@ export default function Music() {
               <span className="text-lg font-semibold">音乐律动</span>
               <Tag tone="warn">实验功能</Tag>
             </div>
-            <Button onClick={toggle} disabled={busy} variant={status.running ? "secondary" : "default"} className="h-10 w-full">
-              {status.running ? <Square /> : <Play />}
-              {status.running ? "停止律动" : "开始律动"}
+            <Button onClick={toggle} disabled={busy} variant={running ? "secondary" : "default"} className="h-10 w-full">
+              {running ? <Square /> : <Play />}
+              {running ? "停止律动" : live.running ? "切换到音乐律动" : "开始律动"}
             </Button>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Volume2 className="size-3.5 shrink-0" />
-              <span className="truncate">{status.source ?? "跟随系统默认播放设备"}</span>
+              <span className="truncate">{(running && live.source) || "跟随系统默认播放设备"}</span>
             </div>
-            {status.error && <p className="text-xs text-destructive">律动已停止：{status.error}</p>}
+            {live.error && <p className="text-xs text-destructive">已停止：{live.error}</p>}
           </div>
           <Section title="律动模式">
             <Segmented
@@ -164,7 +79,7 @@ export default function Music() {
               onChange={(v) => change({ ...params, mode: v })}
             />
             <p className="text-xs leading-relaxed text-muted-foreground">
-              原版驱动的两种音乐模式，用的是同一份频谱数据，由键盘用各自的方式画出来。律动 3 还没在你的键盘上测过。
+              原版驱动的两种音乐模式，用的是同一份频谱数据，由键盘用各自的方式画出来。
             </p>
           </Section>
           <Section title="频谱算法">
@@ -197,16 +112,30 @@ export default function Music() {
               onChange={(v) => change({ ...params, style: v })}
             />
           </Section>
-          <Section title="调节" aside={<button type="button" className="text-xs text-primary hover:underline" onClick={() => change(DEFAULTS)}>恢复默认</button>}>
+          <Section
+            title="调节"
+            aside={
+              <button type="button" className="text-xs text-primary hover:underline" onClick={() => change({ ...LIVE_DEFAULTS, mode: params.mode, style: params.style, algo: params.algo, volumeOverlay: params.volumeOverlay })}>
+                恢复默认
+              </button>
+            }
+          >
             <SliderRow disabled={params.algo === 1} id="music-gain" label="灵敏度" value={params.gain} min={0} max={100} onChange={(v) => change({ ...params, gain: v })} format={(v) => `${v}%`} hint="声音小也想跳得满，就调高。" />
             <SliderRow disabled={params.algo === 1} id="music-gate" label="噪声门限" value={params.gate} min={0} max={100} onChange={(v) => change({ ...params, gate: v })} format={(v) => `${v}%`} hint="低于门限的声音不亮灯，安静时键盘保持全暗。" />
             <SliderRow id="music-decay" label="下落拖尾" value={params.decay} min={0} max={100} onChange={(v) => change({ ...params, decay: v })} format={(v) => `${v}%`} hint="越大，灯柱落下得越慢。" />
             <SliderRow disabled={params.algo === 1} id="music-bass" label="低音加权" value={params.bass} min={0} max={100} onChange={(v) => change({ ...params, bass: v })} format={(v) => `${v}%`} hint="突出鼓点和贝斯。" />
             <SliderRow id="music-spread" label="光晕扩散" value={params.spread} min={0} max={100} onChange={(v) => change({ ...params, spread: v })} format={(v) => `${v}%`} hint="让相邻频段互相带亮，画面更柔和。" />
           </Section>
+          <Section title="旋钮音量条">
+            <label htmlFor="music-vol" className="flex items-center justify-between gap-3 text-[13px]">
+              转旋钮时显示音量条
+              <Switch id="music-vol" checked={params.volumeOverlay} onCheckedChange={(v) => change({ ...params, volumeOverlay: v })} />
+            </label>
+            <p className="text-xs leading-relaxed text-muted-foreground">律动时调音量，键盘会用 1.5 秒显示一条从左到右的音量条，然后回到律动。</p>
+          </Section>
           <Section title="注意">
             <Callout tone="warn">
-              律动需要插着线使用。如果停止后键盘灯不亮，打开原版魔咖驱动，点「恢复默认」即可恢复，键盘不会损坏。
+              需要插着线使用。切到别的页面律动会继续，顶栏可以随时停止。停止后会恢复原来的灯效；万一灯不亮，用原版魔咖驱动点「恢复默认」即可恢复。
             </Callout>
           </Section>
         </>

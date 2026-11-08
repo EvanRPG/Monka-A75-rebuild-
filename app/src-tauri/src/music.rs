@@ -25,7 +25,7 @@ const LOW_HZ: f32 = 40.0;
 const HIGH_HZ: f32 = 16_000.0;
 
 /// The knobs on the Music page. All 0..=100 except `style`.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicParams {
     /// LEDPARAM mode: 22 (music 2) or 20 (music 3). Both take the same frames.
@@ -36,6 +36,18 @@ pub struct MusicParams {
     /// 0: this app's analyser. 1: the vendor's (see `vendor_levels`).
     #[serde(default)]
     pub algo: u8,
+    /// What drives the board: "music", "cpu", "ram", "volume", "timer", "screen".
+    #[serde(default = "default_source")]
+    pub source: String,
+    /// While music plays, turning the knob shows a volume bar for a moment.
+    #[serde(default)]
+    pub volume_overlay: bool,
+    /// Countdown length for the "timer" source.
+    #[serde(default)]
+    pub timer_secs: u32,
+    /// Screen colour: extra saturation and brightness, 0..=100.
+    #[serde(default)]
+    pub boost: f32,
     pub gain: f32,
     pub gate: f32,
     pub decay: f32,
@@ -47,9 +59,26 @@ fn default_mode() -> u8 {
     22
 }
 
+fn default_source() -> String {
+    "music".into()
+}
+
 impl Default for MusicParams {
     fn default() -> Self {
-        Self { mode: 22, style: 0, algo: 0, gain: 55.0, gate: 12.0, decay: 45.0, bass: 30.0, spread: 25.0 }
+        Self {
+            mode: 22,
+            style: 0,
+            algo: 0,
+            source: default_source(),
+            volume_overlay: false,
+            timer_secs: 0,
+            boost: 40.0,
+            gain: 55.0,
+            gate: 12.0,
+            decay: 45.0,
+            bass: 30.0,
+            spread: 25.0,
+        }
     }
 }
 
@@ -190,6 +219,45 @@ impl Analyzer {
     }
 }
 
+/// A bar filling the board left to right, `f` in 0..1. The last column
+/// takes the remainder as height, so the bar moves smoothly.
+pub fn fill_levels(f: f32) -> [u8; BANDS] {
+    let cols = f.clamp(0.0, 1.0) * BANDS as f32;
+    let mut out = [0u8; BANDS];
+    for (i, o) in out.iter_mut().enumerate() {
+        let part = (cols - i as f32).clamp(0.0, 1.0);
+        *o = (part * LEVEL_MAX as f32).round() as u8;
+    }
+    out
+}
+
+/// A scrolling graph: oldest sample on the left, each 0..1.
+pub fn graph_levels(history: &VecDeque<f32>) -> [u8; BANDS] {
+    let mut out = [0u8; BANDS];
+    let skip = BANDS.saturating_sub(history.len());
+    for (o, v) in out.iter_mut().skip(skip).zip(history.iter().rev().take(BANDS).rev()) {
+        *o = (v.clamp(0.0, 1.0) * LEVEL_MAX as f32).round() as u8;
+    }
+    out
+}
+
+/// Screen colour made livelier: an averaged screen is mostly grey.
+pub fn boost_color([r, g, b]: [u8; 3], boost: f32) -> [u8; 3] {
+    let (r, g, b) = (r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    if max <= 0.0 {
+        return [0, 0, 0];
+    }
+    let k = boost.clamp(0.0, 100.0) / 100.0;
+    // Push each channel away from the grey level, then lift brightness.
+    let grey = (max + min) / 2.0;
+    let sat = 1.0 + 2.0 * k;
+    let lift = 1.0 / max.max(0.2) * k + (1.0 - k);
+    let f = |c: f32| (((c - grey) * sat + grey) * lift).clamp(0.0, 1.0);
+    [(f(r) * 255.0) as u8, (f(g) * 255.0) as u8, (f(b) * 255.0) as u8]
+}
+
 /// Recent mono samples from the capture callback.
 #[derive(Clone, Default)]
 pub struct Ring(Arc<Mutex<VecDeque<f32>>>);
@@ -313,6 +381,24 @@ mod tests {
         let mut a = Analyzer::new(48_000);
         let lv = a.levels(&tone, &p);
         assert_eq!(lv.iter().copied().max(), Some(6), "{lv:?}");
+    }
+
+    #[test]
+    fn fill_and_graph_shapes() {
+        assert_eq!(fill_levels(0.0), [0; BANDS]);
+        assert_eq!(fill_levels(1.0), [LEVEL_MAX; BANDS]);
+        let half = fill_levels(0.5);
+        assert!(half[..16].iter().all(|&l| l == 6) && half[16..].iter().all(|&l| l == 0));
+        let h: VecDeque<f32> = vec![1.0, 0.0].into();
+        let g = graph_levels(&h);
+        assert_eq!((g[30], g[31]), (6, 0));
+    }
+
+    #[test]
+    fn boost_keeps_black_and_saturates_colour() {
+        assert_eq!(boost_color([0, 0, 0], 50.0), [0, 0, 0]);
+        let c = boost_color([120, 100, 90], 100.0);
+        assert!(c[0] as i32 - c[2] as i32 > 30, "{c:?}");
     }
 
     #[test]

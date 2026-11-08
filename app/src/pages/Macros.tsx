@@ -23,6 +23,40 @@ for (let i = 1; i <= 12; i++) CODE[`F${i}`] = 57 + i;
 
 const usageName = (u: number) => findFn([0, 0, u, 0])?.label ?? `键码 ${u}`;
 
+/** US-layout keystrokes for a phrase: [usage, needs shift]. */
+const CHAR: Record<string, [number, boolean]> = {
+  " ": [44, false], "\n": [40, false], "-": [45, false], _: [45, true], "=": [46, false], "+": [46, true],
+  "[": [47, false], "{": [47, true], "]": [48, false], "}": [48, true], "\\": [49, false], "|": [49, true],
+  ";": [51, false], ":": [51, true], "'": [52, false], '"': [52, true], "`": [53, false], "~": [53, true],
+  ",": [54, false], "<": [54, true], ".": [55, false], ">": [55, true], "/": [56, false], "?": [56, true],
+  "!": [30, true], "@": [31, true], "#": [32, true], $: [33, true], "%": [34, true], "^": [35, true],
+  "&": [36, true], "*": [37, true], "(": [38, true], ")": [39, true],
+};
+for (let i = 0; i < 26; i++) {
+  CHAR[String.fromCharCode(97 + i)] = [4 + i, false];
+  CHAR[String.fromCharCode(65 + i)] = [4 + i, true];
+}
+for (let i = 1; i <= 9; i++) CHAR[String(i)] = [29 + i, false];
+CHAR["0"] = [39, false];
+
+function phraseEvents(text: string): { events: MacroEvent[]; skipped: number } {
+  const events: MacroEvent[] = [];
+  let skipped = 0;
+  for (const ch of text) {
+    const k = CHAR[ch];
+    if (!k) {
+      skipped++;
+      continue;
+    }
+    const [u, shift] = k;
+    if (shift) events.push({ kind: "key", usage: 225, pressed: true, delayMs: 5 });
+    events.push({ kind: "key", usage: u, pressed: true, delayMs: 10 });
+    events.push({ kind: "key", usage: u, pressed: false, delayMs: 5 });
+    if (shift) events.push({ kind: "key", usage: 225, pressed: false, delayMs: 5 });
+  }
+  return { events, skipped };
+}
+
 const SLOTS = 16;
 
 export default function Macros() {
@@ -31,6 +65,7 @@ export default function Macros() {
   const [names, setNames] = useState<Record<number, number>>({});
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [phrase, setPhrase] = useState("");
   const last = useRef(0);
 
   useEffect(() => {
@@ -175,8 +210,24 @@ export default function Macros() {
             <span className="tabular">单次约 {(total / 1000).toFixed(2)} 秒</span>
           </div>
         </Section>
+        <Section title="输入一段文字">
+          <p className="text-xs leading-relaxed text-muted-foreground">把常用的邮箱、签名、指令变成宏，按一个键就自动打出来。只支持英文、数字和键盘上的符号（中文要靠输入法，宏打不出来）。</p>
+          <Input id="macro-phrase" value={phrase} onChange={(e) => setPhrase(e.target.value)} placeholder="例如 evan@example.com" className="h-9" />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!phrase || recording}
+            onClick={() => {
+              const { events, skipped } = phraseEvents(phrase);
+              setMacro((m) => ({ ...m, events }));
+              if (skipped) toast.info(`有 ${skipped} 个字符不能用宏输入，已跳过`);
+            }}
+          >
+            生成步骤（替换当前步骤）
+          </Button>
+        </Section>
         <Section title="绑定到按键">
-          <p className="text-[13px] leading-relaxed text-muted-foreground">保存后，到「按键」页选一个键，在「宏」分类里点「宏 {slot + 1}」。</p>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">保存后，到「按键」页选一个键，在「宏」分类里点「宏 {slot + 1}」。那里还能选触发方式：按一下执行、按一下开/关、按住循环。</p>
         </Section>
         <Section title="说明">
           <Callout>宏会存进键盘，换电脑也能用。保存时软件会控制写入节奏，连续保存之间会稍等几秒。</Callout>

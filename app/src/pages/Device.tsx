@@ -3,10 +3,10 @@ import { Callout, Segmented, SliderRow, Tag } from "@/components/parts";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { api, type DeviceSettings, type ReportRate } from "@/lib/backend";
+import { api, IS_DESKTOP, type DeviceSettings, type Prefs, type ReportRate } from "@/lib/backend";
 import { useApp, type ThemeChoice } from "@/lib/store";
 import { toast } from "sonner";
-import { BatteryCharging, Cable, Cpu, Radio, RotateCcw } from "lucide-react";
+import { BatteryCharging, Cable, Cpu, Download, Radio, RotateCcw, Upload } from "lucide-react";
 
 function Card({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
@@ -71,7 +71,30 @@ function SleepSelect({ id, value, onChange }: { id: string; value: number; onCha
 }
 
 export default function Device() {
-  const { device, theme, setTheme } = useApp();
+  const { device, theme, setTheme, profile, setProfile } = useApp();
+  const [prefs, setPrefs] = useState<Prefs | null>(null);
+  const [autostart, setAutostart] = useState(false);
+  const [switching, setSwitching] = useState<number | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  useEffect(() => {
+    api.getPrefs().then(setPrefs).catch(() => {});
+    api.getAutostart().then(setAutostart).catch(() => {});
+  }, []);
+  const savePrefs = (p: Prefs) => {
+    setPrefs(p);
+    api.setPrefs(p).catch((e) => toast.error(`保存失败：${e}`));
+  };
+  const backup = async (kind: "export" | "import") => {
+    setBackupBusy(true);
+    try {
+      const r = kind === "export" ? await api.exportConfig() : await api.importConfig();
+      if (r !== null) toast.success(kind === "export" ? "已备份到文件" : "已从文件恢复，键盘设置已更新");
+    } catch (e) {
+      toast.error(`${kind === "export" ? "备份" : "恢复"}失败：${e}`);
+    } finally {
+      setBackupBusy(false);
+    }
+  };
   const [s, setS] = useState<DeviceSettings | null>(null);
   const [rate, setRate] = useState<ReportRate | null>(null);
   const [readBack, setReadBack] = useState<ReportRate | null>(null);
@@ -200,6 +223,79 @@ export default function Device() {
           ) : (
             <p className="text-[13px] text-muted-foreground">读取中…</p>
           )}
+        </Card>
+
+        <Card title="备份与恢复">
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            把改键、Fn 层、灯效、防抖和休眠设置存成一个文件。换电脑、恢复出厂之后，一键还原。只备份配置 1，宏和逐键图案不在备份里。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={backupBusy} onClick={() => backup("export")}>
+              <Download />
+              备份到文件
+            </Button>
+            <Button variant="outline" size="sm" disabled={backupBusy} onClick={() => backup("import")}>
+              <Upload />
+              从文件恢复
+            </Button>
+          </div>
+        </Card>
+
+        <Card title="配置档" aside={<Tag tone="warn">待验证</Tag>}>
+          <Segmented
+            id="profile"
+            className="w-full"
+            value={switching ?? profile}
+            options={[0, 1, 2].map((i) => [i, `配置 ${i + 1}`] as [number, string])}
+            onChange={async (v) => {
+              setSwitching(v);
+              try {
+                await setProfile(v);
+                toast.success(`已切换到配置 ${v + 1}`);
+              } catch (e) {
+                toast.error(`键盘没有接受：${e}`);
+              } finally {
+                setSwitching(null);
+              }
+            }}
+          />
+          <Callout tone="warn">
+            原版驱动的设备表写着 3 层，但还没确认 A75 真的能存 3 套。切换后键盘会回读确认，没切过去会提示。如果真有多套，按键页和旋钮页改的是当前这一套。
+          </Callout>
+        </Card>
+
+        <Card title="软件">
+          <Row label="开机自动启动" hint="启动后待在右下角托盘里" htmlFor="autostart">
+            <Switch
+              id="autostart"
+              checked={autostart}
+              onCheckedChange={(v) => {
+                setAutostart(v);
+                api.setAutostart(v).catch((e) => {
+                  setAutostart(!v);
+                  toast.error(`设置失败：${e}`);
+                });
+              }}
+            />
+          </Row>
+          <Row label="关闭窗口时留在托盘" hint="按程序切换、律动等功能继续工作" htmlFor="close-tray">
+            <Switch id="close-tray" checked={prefs?.closeToTray ?? true} onCheckedChange={(v) => prefs && savePrefs({ ...prefs, closeToTray: v })} />
+          </Row>
+          <Row label="2.4G 低电量提醒" hint="电量低于这个值时弹出系统通知" htmlFor="batt-alert">
+            <Select value={String(prefs?.batteryAlert ?? 20)} onValueChange={(v) => prefs && savePrefs({ ...prefs, batteryAlert: Number(v) })}>
+              <SelectTrigger id="batt-alert" size="sm" className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[0, 10, 20, 30].map((v) => (
+                  <SelectItem key={v} value={String(v)}>
+                    {v === 0 ? "关闭" : `${v}%`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Row>
+          {!IS_DESKTOP && <p className="text-xs text-muted-foreground">演示模式下这些开关不起作用。</p>}
         </Card>
 
         <Card title="外观">

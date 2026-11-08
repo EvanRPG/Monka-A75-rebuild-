@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, type ConnectedDevice, type LedParam, type ScanInfo } from "./backend";
+import { api, type ConnectedDevice, type LedParam, type MusicParams, type MusicStatus, type ScanInfo } from "./backend";
 
 export type ThemeChoice = "dark" | "light" | "system";
 
@@ -15,7 +15,18 @@ interface AppState {
   setTheme: (t: ThemeChoice) => void;
   /** The theme actually showing, after following the system. */
   dark: boolean;
+  /** Active profile slot (0-based). */
+  profile: number;
+  setProfile: (p: number) => Promise<void>;
+  /** Live lighting (music, meters, screen): one stream at a time. */
+  live: MusicStatus;
+  liveParams: MusicParams | null;
+  startLive: (p: MusicParams) => Promise<void>;
+  updateLive: (p: MusicParams) => void;
+  stopLive: () => Promise<void>;
 }
+
+const IDLE: MusicStatus = { running: false, source: null, levels: new Array(32).fill(0) };
 
 const Ctx = createContext<AppState | null>(null);
 
@@ -87,14 +98,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(t);
   }, [rescan, device === null]);
 
+  const [profile, setProfileState] = useState(0);
+  useEffect(() => {
+    if (device) api.getProfile().then(setProfileState).catch(() => {});
+  }, [device?.path]);
+  const setProfile = useCallback(async (p: number) => {
+    await api.setProfile(p);
+    setProfileState(p);
+    setLedState(await api.getLedParam());
+  }, []);
+
+  const [live, setLive] = useState<MusicStatus>(IDLE);
+  const [liveParams, setLiveParams] = useState<MusicParams | null>(null);
+  // Pick up a stream that kept running while the window was hidden.
+  useEffect(() => {
+    if (device) api.musicStatus().then(setLive).catch(() => {});
+  }, [device?.path]);
+  // Read back what is actually sent, ~30 times a second while streaming.
+  useEffect(() => {
+    if (!live.running) return;
+    let alive = true;
+    const t = setInterval(() => {
+      api
+        .musicStatus()
+        .then((s) => alive && setLive(s))
+        .catch(() => {});
+    }, 33);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [live.running]);
+  const startLive = useCallback(async (p: MusicParams) => {
+    await api.musicStart(p);
+    setLiveParams(p);
+    setLive(await api.musicStatus());
+  }, []);
+  const updateLive = useCallback((p: MusicParams) => {
+    setLiveParams(p);
+    api.musicParams(p).catch(() => {});
+  }, []);
+  const stopLive = useCallback(async () => {
+    await api.musicStop();
+    setLive(IDLE);
+    setLedState(await api.getLedParam().catch(() => null));
+  }, []);
+
   const setLed = useCallback(async (p: LedParam) => {
     setLedState(p);
     await api.setLedParam(p);
   }, []);
 
   const value = useMemo(
-    () => ({ device, scanning, scanNote, rescan, led, setLed, theme, setTheme: setThemeState, dark }),
-    [device, scanning, scanNote, rescan, led, setLed, theme, dark],
+    () => ({
+      device,
+      scanning,
+      scanNote,
+      rescan,
+      led,
+      setLed,
+      theme,
+      setTheme: setThemeState,
+      dark,
+      profile,
+      setProfile,
+      live,
+      liveParams,
+      startLive,
+      updateLive,
+      stopLive,
+    }),
+    [device, scanning, scanNote, rescan, led, setLed, theme, dark, profile, setProfile, live, liveParams, startLive, updateLive, stopLive],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -78,6 +78,14 @@ export interface MusicParams {
   style: number;
   /** 0 this app's analyser (tunable), 1 the vendor's (auto gain). */
   algo: number;
+  /** What drives the board. */
+  source: LiveSource;
+  /** During music, turning the knob shows a volume bar for a moment. */
+  volumeOverlay: boolean;
+  /** Countdown length for the timer source. */
+  timerSecs: number;
+  /** Screen colour boost, 0..100. */
+  boost: number;
   gain: number;
   gate: number;
   decay: number;
@@ -85,7 +93,11 @@ export interface MusicParams {
   spread: number;
 }
 
+export type LiveSource = "music" | "cpu" | "ram" | "volume" | "timer" | "screen";
+
 export interface MusicStatus {
+  /** Last screen colour sent. */
+  color?: [number, number, number] | null;
   running: boolean;
   /** Why the stream stopped on its own. */
   error?: string | null;
@@ -96,6 +108,33 @@ export interface MusicStatus {
 }
 
 export type ReportRate = 125 | 250 | 500 | 1000;
+
+export interface AppRule {
+  /** Program file name, e.g. "valorant.exe". */
+  exe: string;
+  led: LedParam;
+  winLock: boolean;
+}
+
+export interface Prefs {
+  rulesEnabled: boolean;
+  rules: AppRule[];
+  statsEnabled: boolean;
+  /** Notify under this percent over 2.4G; 0 is off. */
+  batteryAlert: number;
+  closeToTray: boolean;
+}
+
+export interface Stats {
+  enabled: boolean;
+  active: boolean;
+  /** HID usage -> presses. */
+  counts: Record<string, number>;
+  total: number;
+  perMinute: number;
+  /** Unix seconds. */
+  since: string;
+}
 
 export interface Backend {
   scan(): Promise<ScanInfo>;
@@ -120,6 +159,19 @@ export interface Backend {
   musicStop(): Promise<void>;
   musicParams(p: MusicParams): Promise<void>;
   musicStatus(): Promise<MusicStatus>;
+  getProfile(): Promise<number>;
+  setProfile(p: number): Promise<void>;
+  /** Ask where to save, then write the keyboard's settings there. Null when cancelled. */
+  exportConfig(): Promise<string | null>;
+  importConfig(): Promise<string | null>;
+  getPrefs(): Promise<Prefs>;
+  setPrefs(p: Prefs): Promise<void>;
+  recentApps(): Promise<string[]>;
+  getStats(): Promise<Stats>;
+  resetStats(): Promise<void>;
+  getAutostart(): Promise<boolean>;
+  setAutostart(on: boolean): Promise<void>;
+  notify(title: string, body: string): Promise<void>;
 }
 
 const tauriBackend: Backend = {
@@ -173,6 +225,28 @@ const tauriBackend: Backend = {
   musicStop: () => invoke("a75_music_stop"),
   musicParams: (params) => invoke("a75_music_params", { params }),
   musicStatus: () => invoke("a75_music_status"),
+  getProfile: () => invoke("get_profile"),
+  setProfile: (profile) => invoke("set_profile", { profile }),
+  async exportConfig() {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const path = await save({ defaultPath: "A75-备份.json", filters: [{ name: "A75 配置", extensions: ["json"] }] });
+    if (!path) return null;
+    return invoke<string>("export_config", { path });
+  },
+  async importConfig() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const path = await open({ multiple: false, filters: [{ name: "A75 配置", extensions: ["json"] }] });
+    if (!path || Array.isArray(path)) return null;
+    return invoke<string>("import_config", { path });
+  },
+  getPrefs: () => invoke("a75_prefs_get"),
+  setPrefs: (prefs) => invoke("a75_prefs_set", { prefs }),
+  recentApps: () => invoke("a75_recent_apps"),
+  getStats: () => invoke("a75_stats_get"),
+  resetStats: () => invoke("a75_stats_reset"),
+  getAutostart: () => invoke("a75_autostart_get"),
+  setAutostart: (on) => invoke("a75_autostart_set", { on }),
+  notify: (title, body) => invoke("a75_notify", { title, body }),
 };
 
 export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

@@ -4,6 +4,8 @@
 mod a75;
 mod commands;
 mod music;
+mod win;
+mod tray;
 pub mod derive;
 pub mod dev;
 pub mod hid;
@@ -38,10 +40,33 @@ pub fn run() {
         )
         .manage(AppState::default())
         .manage(a75::MusicState::default())
-        // Never leave the board in music mode when the window goes away.
+        .manage(a75::Extras::default())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
+        .setup(|app| {
+            a75::load(app.handle());
+            tray::build(app.handle())?;
+            // Started with Windows: stay in the tray.
+            if std::env::args().any(|a| a == "--hidden") {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
+            Ok(())
+        })
+        // Closing the window keeps the app in the tray (so program rules and
+        // live lighting carry on) unless the owner turned that off.
         .on_window_event(|w, e| {
-            if let tauri::WindowEvent::CloseRequested { .. } = e {
-                let _ = a75::stop_music(w.app_handle());
+            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                if a75::prefs(w.app_handle()).close_to_tray {
+                    api.prevent_close();
+                    let _ = w.hide();
+                } else {
+                    a75::on_exit(w.app_handle());
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -95,7 +120,20 @@ pub fn run() {
             a75::a75_music_stop,
             a75::a75_music_params,
             a75::a75_music_status,
+            a75::a75_prefs_get,
+            a75::a75_prefs_set,
+            a75::a75_recent_apps,
+            a75::a75_stats_get,
+            a75::a75_stats_reset,
+            a75::a75_autostart_get,
+            a75::a75_autostart_set,
+            a75::a75_notify,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                a75::on_exit(app);
+            }
+        });
 }

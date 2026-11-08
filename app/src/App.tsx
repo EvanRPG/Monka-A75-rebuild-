@@ -1,10 +1,15 @@
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import { AppProvider, useApp } from "@/lib/store";
 import { IS_DESKTOP } from "@/lib/backend";
 import { Toaster } from "@/components/parts";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
+  AppWindow,
+  BarChart3,
+  Gauge,
+  RotateCw,
+  Square,
   AudioLines,
   Battery,
   Brush,
@@ -25,15 +30,31 @@ import Screen from "@/pages/Screen";
 import Keys from "@/pages/Keys";
 import Macros from "@/pages/Macros";
 import Device from "@/pages/Device";
+import Meters from "@/pages/Meters";
+import Knob from "@/pages/Knob";
+import Rules from "@/pages/Rules";
+import Stats from "@/pages/Stats";
+import { api } from "@/lib/backend";
 
-export type PageId = "lighting" | "paint" | "music" | "screen" | "keys" | "macros" | "device";
+export type PageId =
+  | "lighting"
+  | "paint"
+  | "music"
+  | "screen"
+  | "meters"
+  | "keys"
+  | "knob"
+  | "macros"
+  | "rules"
+  | "stats"
+  | "device";
 
 interface PageDef {
   id: PageId;
   name: string;
   desc: string;
   icon: ComponentType<{ className?: string }>;
-  group: "灯光" | "按键" | "设备";
+  group: "灯光" | "按键" | "智能" | "设备";
 }
 
 const PAGES: PageDef[] = [
@@ -41,8 +62,12 @@ const PAGES: PageDef[] = [
   { id: "paint", name: "逐键灯光", desc: "给每个键单独上色，存进键盘", icon: Brush, group: "灯光" },
   { id: "music", name: "音乐律动", desc: "电脑分析声音，键盘跟着节奏亮", icon: AudioLines, group: "灯光" },
   { id: "screen", name: "屏幕光影", desc: "键盘跟随屏幕主色变化", icon: Monitor, group: "灯光" },
-  { id: "keys", name: "按键", desc: "改键、Fn 层和旋钮", icon: KeyboardIcon, group: "按键" },
+  { id: "meters", name: "键盘仪表", desc: "把键盘当小屏幕：CPU、内存、音量、倒计时", icon: Gauge, group: "灯光" },
+  { id: "keys", name: "按键", desc: "改键和 Fn 层", icon: KeyboardIcon, group: "按键" },
+  { id: "knob", name: "旋钮", desc: "左转、右转、按下各做什么", icon: RotateCw, group: "按键" },
   { id: "macros", name: "宏", desc: "录制一串按键，绑定到任意键", icon: ListVideo, group: "按键" },
+  { id: "rules", name: "按程序切换", desc: "打开指定程序时自动换灯效、锁 Win 键", icon: AppWindow, group: "智能" },
+  { id: "stats", name: "打字统计", desc: "按键热力图和打字速度", icon: BarChart3, group: "智能" },
   { id: "device", name: "设备", desc: "回报率、防抖、休眠、恢复出厂", icon: SlidersHorizontal, group: "设备" },
 ];
 
@@ -71,7 +96,7 @@ function Shell() {
   };
 
   const def = PAGES.find((p) => p.id === page)!;
-  const groups = ["灯光", "按键", "设备"] as const;
+  const groups = ["灯光", "按键", "智能", "设备"] as const;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground md:flex-row">
@@ -123,6 +148,7 @@ function Shell() {
           {!IS_DESKTOP && (
             <span className="rounded-[4px] border border-warn/40 bg-warn/10 px-2 py-0.5 text-[11px] text-warn">演示模式：未连接真实键盘</span>
           )}
+          <LivePill go={go} />
           <StatusPills scanning={scanning} />
           <button
             type="button"
@@ -163,6 +189,7 @@ function Shell() {
         )}
       </main>
       <Toaster />
+      <BatteryWatch />
     </div>
   );
 }
@@ -183,7 +210,60 @@ function PageView({ page, go }: { page: PageId; go: (p: PageId) => void }) {
       return <Macros />;
     case "device":
       return <Device />;
+    case "meters":
+      return <Meters />;
+    case "knob":
+      return <Knob />;
+    case "rules":
+      return <Rules />;
+    case "stats":
+      return <Stats />;
   }
+}
+
+const LIVE_NAMES: Record<string, [string, PageId]> = {
+  music: ["音乐律动", "music"],
+  screen: ["屏幕光影", "screen"],
+  cpu: ["CPU 仪表", "meters"],
+  ram: ["内存仪表", "meters"],
+  volume: ["音量仪表", "meters"],
+  timer: ["倒计时", "meters"],
+};
+
+/** Shown while the computer drives the board, on every page. */
+function LivePill({ go }: { go: (p: PageId) => void }) {
+  const { live, liveParams, stopLive } = useApp();
+  if (!live.running || !liveParams) return null;
+  const [name, page] = LIVE_NAMES[liveParams.source] ?? ["实时灯光", "music"];
+  return (
+    <div className="flex h-7 items-center overflow-hidden rounded-md border border-primary/40 bg-primary/10 text-xs">
+      <button type="button" onClick={() => go(page)} className="flex h-full items-center gap-1.5 px-2.5 hover:bg-primary/15">
+        <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+        {name}进行中
+      </button>
+      <button type="button" aria-label="停止" onClick={() => stopLive()} className="grid h-full place-items-center border-l border-primary/30 px-2 hover:bg-primary/15">
+        <Square className="size-3" />
+      </button>
+    </div>
+  );
+}
+
+/** 2.4G only: one notification each time the battery drops under the threshold. */
+function BatteryWatch() {
+  const { device } = useApp();
+  const warned = useRef(false);
+  useEffect(() => {
+    const b = device?.battery;
+    if (device?.link !== "receiver" || b == null) return;
+    api.getPrefs().then((p) => {
+      if (p.batteryAlert > 0 && b < p.batteryAlert && !warned.current) {
+        warned.current = true;
+        api.notify("A75 电量低", `键盘电量 ${b}%，记得插线充电。`).catch(() => {});
+      }
+      if (b >= p.batteryAlert + 5) warned.current = false;
+    });
+  }, [device?.battery, device?.link]);
+  return null;
 }
 
 function StatusPills({ scanning }: { scanning: boolean }) {

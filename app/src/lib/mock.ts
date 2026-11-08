@@ -1,6 +1,6 @@
 // Demo backend: a pretend A75 on a cable, so every page can be tried in a
 // browser. Nothing here reaches hardware.
-import type { Backend, LedParam, Macro, MusicParams, ReportRate, DeviceSettings } from "./backend";
+import type { Backend, LedParam, Macro, MusicParams, ReportRate, DeviceSettings, Prefs } from "./backend";
 import { defaultFnMatrix, defaultMatrix } from "./a75";
 
 const wait = (ms = 60) => new Promise((r) => setTimeout(r, ms));
@@ -34,6 +34,26 @@ const state = {
     revision: "1.05",
   } as DeviceSettings,
   rate: 1000 as ReportRate,
+  profile: 0,
+  prefs: {
+    rulesEnabled: true,
+    rules: [
+      {
+        exe: "valorant.exe",
+        led: { mode: 1, speed: 0, brightness: 4, option: 0, dazzle: false, r: 255, g: 59, b: 48 },
+        winLock: true,
+      },
+    ],
+    statsEnabled: true,
+    batteryAlert: 20,
+    closeToTray: true,
+  } as Prefs,
+  stats: (() => {
+    // Plausible typing: home row and vowels heavy.
+    const w: Record<number, number> = { 4: 820, 8: 1240, 12: 690, 18: 760, 22: 610, 23: 900, 17: 650, 21: 600, 44: 2100, 42: 540, 40: 300, 7: 410, 9: 260, 15: 380, 16: 300, 6: 300, 25: 120, 11: 420, 26: 240, 225: 380, 224: 290, 19: 180, 24: 330, 10: 220, 28: 210, 14: 100, 5: 160, 29: 30, 27: 40, 20: 20, 13: 30, 54: 140, 55: 190 };
+    return w;
+  })(),
+  t0: Date.now(),
   music: { running: false, params: null as MusicParams | null, t0: 0, levels: new Array(32).fill(0) },
 };
 
@@ -144,8 +164,72 @@ export const mockBackend: Backend = {
   async musicParams(p) {
     state.music.params = p;
   },
+  async getProfile() {
+    return state.profile;
+  },
+  async setProfile(p) {
+    await wait(1000);
+    state.profile = p;
+  },
+  async exportConfig() {
+    await wait(400);
+    return "演示模式：没有真的写文件";
+  },
+  async importConfig() {
+    await wait(400);
+    return "演示模式：没有真的读文件";
+  },
+  async getPrefs() {
+    return structuredClone(state.prefs);
+  },
+  async setPrefs(p) {
+    state.prefs = structuredClone(p);
+  },
+  async recentApps() {
+    return ["valorant.exe", "chrome.exe", "code.exe", "wechat.exe", "steam.exe"];
+  },
+  async getStats() {
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const [k, v] of Object.entries(state.stats)) {
+      counts[k] = v;
+      total += v;
+    }
+    return {
+      enabled: state.prefs.statsEnabled,
+      active: state.prefs.statsEnabled,
+      counts,
+      total,
+      perMinute: 180 + Math.round(40 * Math.sin(Date.now() / 4000)),
+      since: String(Math.floor(state.t0 / 1000) - 86400 * 3),
+    };
+  },
+  async resetStats() {
+    state.stats = {};
+  },
+  async getAutostart() {
+    return false;
+  },
+  async setAutostart() {},
+  async notify() {},
   async musicStatus() {
     const m = state.music;
+    if (m.running && m.params && m.params.source !== "music") {
+      const t = (performance.now() - m.t0) / 1000;
+      const src = m.params.source;
+      const frac =
+        src === "ram" ? 0.62 : src === "volume" ? 0.45 : src === "timer" ? Math.max(0, 1 - t / Math.max(1, m.params.timerSecs)) : 0;
+      m.levels =
+        src === "cpu"
+          ? Array.from({ length: 32 }, (_, i) => 3 + 2.5 * Math.sin((t * 4 + i) / 3) * Math.sin((t + i) / 5))
+          : Array.from({ length: 32 }, (_, i) => Math.max(0, Math.min(1, frac * 32 - i)) * 6);
+      return {
+        running: true,
+        source: null,
+        levels: m.levels.map((v) => Math.round(Math.max(0, Math.min(6, v)))),
+        color: src === "screen" ? ([Math.round(120 + 100 * Math.sin(t)), 80, Math.round(160 + 80 * Math.cos(t / 1.3))] as [number, number, number]) : null,
+      };
+    }
     if (m.running && m.params) {
       const raw = fakeSpectrum(performance.now() - m.t0, m.params);
       const decay = 0.15 + (m.params.decay / 100) * 0.8;

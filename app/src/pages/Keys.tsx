@@ -8,15 +8,17 @@ import { api } from "@/lib/backend";
 import { GROUPS, capText, describe, sameEntry, type KeyFn } from "@/lib/keys";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useApp } from "@/lib/store";
 import { RotateCcw, Search } from "lucide-react";
 
 type Layer = "base" | "fn";
 
-const MACRO_ITEMS: KeyFn[] = Array.from({ length: 8 }, (_, i) => ({
-  label: `宏 ${i + 1}`,
-  cap: `M${i + 1}`,
-  entry: [9, 0, i, 0],
-}));
+const macroItems = (mode: number): KeyFn[] =>
+  Array.from({ length: 16 }, (_, i) => ({
+    label: `宏 ${i + 1}`,
+    cap: `M${i + 1}`,
+    entry: [9, mode, i, 0],
+  }));
 
 export default function Keys() {
   const [layer, setLayer] = useState<Layer>("base");
@@ -24,12 +26,14 @@ export default function Keys() {
   const [sel, setSel] = useState<KeyCap | null>(KEYS.find((k) => k.name === "Caps") ?? null);
   const [group, setGroup] = useState("letters");
   const [query, setQuery] = useState("");
+  const [macroMode, setMacroMode] = useState(0);
+  const { profile } = useApp();
 
   useEffect(() => {
-    Promise.all([api.readKeymap(0), api.readFnKeymap(0)])
+    Promise.all([api.readKeymap(profile), api.readFnKeymap(profile)])
       .then(([base, fn]) => setMaps({ base, fn }))
       .catch((e) => toast.error(`读取按键失败：${e}`));
-  }, []);
+  }, [profile]);
 
   const defaults = layer === "base" ? defaultMatrix() : DEFAULT_FN_MATRIX;
   const matrix = maps ? maps[layer] : null;
@@ -55,7 +59,7 @@ export default function Keys() {
     try {
       // Resolves on success (the flag only says which write path was used);
       // failures arrive as errors.
-      await api.setKey(0, sel.slot, f.entry, fnLayer);
+      await api.setKey(profile, sel.slot, f.entry, fnLayer);
       setMaps((m) => {
         if (!m) return m;
         const next = [...m[layer]];
@@ -68,7 +72,7 @@ export default function Keys() {
     }
   };
 
-  const groups = [...GROUPS.slice(0, -1), { id: "macro", name: "宏", items: MACRO_ITEMS }, GROUPS[GROUPS.length - 1]];
+  const groups = [...GROUPS.slice(0, -1), { id: "macro", name: "宏", items: macroItems(macroMode) }, GROUPS[GROUPS.length - 1]];
   const items = query.trim()
     ? groups.flatMap((g) => g.items).filter((f) => (f.label + (f.cap ?? "")).toLowerCase().includes(query.trim().toLowerCase()))
     : groups.find((g) => g.id === group)?.items ?? [];
@@ -126,6 +130,23 @@ export default function Keys() {
                 ))}
               </nav>
             )}
+            <div className="flex min-w-0 flex-1 flex-col">
+            {!query && group === "macro" && (
+              <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2 text-xs text-muted-foreground">
+                触发方式
+                <Segmented
+                  id="macro-mode"
+                  size="sm"
+                  value={macroMode}
+                  options={[
+                    [0, "按一下执行"],
+                    [1, "按一下开/关"],
+                    [2, "按住循环"],
+                  ]}
+                  onChange={setMacroMode}
+                />
+              </div>
+            )}
             <div className="grid flex-1 auto-rows-[40px] grid-cols-[repeat(auto-fill,minmax(84px,1fr))] content-start gap-1.5 p-3">
               {items.map((f) => {
                 const on = current ? sameEntry(current, f.entry) : false;
@@ -146,6 +167,7 @@ export default function Keys() {
                 );
               })}
               {items.length === 0 && <p className="col-span-full py-6 text-center text-[13px] text-muted-foreground">没有匹配的功能</p>}
+            </div>
             </div>
           </div>
         </div>

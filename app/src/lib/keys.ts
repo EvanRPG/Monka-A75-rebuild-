@@ -153,6 +153,7 @@ export const GROUPS: KeyGroup[] = [
       { label: "查看电量", cap: "电量", entry: [10, 8, 0, 0] },
       { label: "省电模式", cap: "省电", entry: [10, 12, 0, 0] },
       { label: "恢复出厂", cap: "复位", entry: [10, 2, 0, 0] },
+      { label: "充电指示灯开关（实验）", cap: "充电灯", entry: [10, 22, 0, 0] },
     ],
   },
   {
@@ -188,7 +189,7 @@ export function describe(entry: number[], fnLayer = false): string {
   const f = findFn(entry);
   if (f) return f.label;
   const [tag, , b] = entry;
-  if (tag === 9) return `宏 ${b + 1}`;
+  if (tag === 9) return `宏 ${b + 1}${["", "（按一下开/关）", "（按住循环）"][entry[1]] ?? ""}`;
   if (tag === 0) return `组合键`;
   if (tag === 3) return "多媒体";
   if (tag === 13) return "灯光控制";
