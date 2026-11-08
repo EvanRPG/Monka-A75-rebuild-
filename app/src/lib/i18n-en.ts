@@ -534,4 +534,8 @@ export const EN: Record<string, string> = {
   "回报率调节": "Report rate",
   "音乐律动：本软件的频谱算法、参数调节、转旋钮显示音量条": "Music: this app's spectrum algorithm, tuning, knob volume bar",
   "宏：输入文字生成宏": "Macros: turn text into a macro",
+  "正在检查…": "Checking…",
+  "还是不行？生成诊断信息（只读取，不写入键盘）": "Still not working? Create a diagnostic report (read only, nothing is written)",
+  "已复制，粘贴发给开发者即可。": "Copied. Paste it to the developer.",
+  "正在读取键盘灯效…": "Reading the keyboard's lighting…",
 };

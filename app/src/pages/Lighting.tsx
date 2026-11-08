@@ -77,7 +77,7 @@ export default function Lighting({ go }: { go: (p: PageId) => void }) {
     return preview(p, presses.current);
   }, [draft, effect]);
 
-  if (!draft) return null;
+  if (!draft) return <div className="grid flex-1 place-items-center text-[13px] text-muted-foreground">{t("正在读取键盘灯效…")}</div>;
 
   const onboard = EFFECTS.filter((e) => e.kind === "onboard");
   const hosted = EFFECTS.filter((e) => e.kind !== "onboard");

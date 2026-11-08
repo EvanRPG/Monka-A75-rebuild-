@@ -173,6 +173,8 @@ export interface Backend {
   getAutostart(): Promise<boolean>;
   setAutostart(on: boolean): Promise<void>;
   notify(title: string, body: string): Promise<void>;
+  /** Read-only report of what the computer sees, for when the board is not found. */
+  scanDebug(): Promise<string>;
 }
 
 const tauriBackend: Backend = {
@@ -248,6 +250,7 @@ const tauriBackend: Backend = {
   getAutostart: () => invoke("a75_autostart_get"),
   setAutostart: (on) => invoke("a75_autostart_set", { on }),
   notify: (title, body) => invoke("a75_notify", { title, body }),
+  scanDebug: () => invoke("a75_scan_debug"),
 };
 
 export const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

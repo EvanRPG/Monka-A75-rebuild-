@@ -278,7 +278,10 @@ pub fn scan(state: tauri::State<AppState>) -> Result<ScanResult, String> {
             }
         };
         match transport.identify() {
+            // Some receivers may flag the relayed id's top bit; the board
+            // underneath is the same entry.
             Ok(id) => match registry::by_id(id)
+                .or_else(|| registry::by_id(id & 0x7FFF_FFFF))
                 .map(|spec| {
                     // An entry from the vendor's older table knows the board
                     // but not its command set; the board says which.
@@ -1847,4 +1850,90 @@ pub fn raw_command(
 pub(crate) fn open_board(state: &tauri::State<AppState>) -> Option<(u32, Link)> {
     let inner = state.inner.lock();
     inner.open.as_ref().map(|o| (o.spec.id, o.transport.link()))
+}
+
+/// What the computer sees of the board, for an owner to paste when it is
+/// not found. Reads only: the identify GET and the receiver's status, both
+/// of which change nothing on the board.
+#[tauri::command(async)]
+pub fn a75_scan_debug(state: tauri::State<AppState>) -> Result<String, String> {
+    let mut inner = state.inner.lock();
+    let mut out = String::new();
+    let hex = |b: &[u8]| {
+        b.iter()
+            .map(|x| format!("{x:02x}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let found = {
+        let api = inner.api()?;
+        out.push_str("hid 0x3151:\n");
+        for d in api.device_list().filter(|d| d.vendor_id() == 0x3151) {
+            out.push_str(&format!(
+                "  pid {:04x} page {:04x} usage {:02x} if {} bus {:?} \"{}\"\n",
+                d.product_id(),
+                d.usage_page(),
+                d.usage(),
+                d.interface_number(),
+                d.bus_type(),
+                d.product_string().unwrap_or_default(),
+            ));
+        }
+        hid::discover(api)
+    };
+    if let Some(open) = &inner.open {
+        out.push_str(&format!(
+            "open: id {} link {:?}\n",
+            open.spec.id,
+            open.transport.link()
+        ));
+        return Ok(out);
+    }
+    out.push_str(&format!("stalled: {}\n", inner.stalled));
+    for d in found {
+        out.push_str(&format!(
+            "candidate pid {:04x} usage {:02x}\n",
+            d.product_id, d.usage
+        ));
+        let api = inner.api.as_ref().ok_or("no hid")?;
+        let t = match Transport::open(api, &d.path) {
+            Ok(t) => t,
+            Err(e) => {
+                out.push_str(&format!("  open failed: {e}\n"));
+                continue;
+            }
+        };
+        let probe = |t: &Transport, pkt: [u8; crate::protocol::REPORT_LEN]| -> String {
+            match t.send(&pkt).and_then(|_| {
+                std::thread::sleep(Duration::from_millis(30));
+                t.read()
+            }) {
+                Ok(r) => hex(&r[..12]),
+                Err(e) => format!("error {e}"),
+            }
+        };
+        out.push_str(&format!(
+            "  0x8F direct: {}\n",
+            probe(
+                &t,
+                crate::protocol::packet(cmd::GET_USB_VERSION, &[], Checksum::Bit7)
+            )
+        ));
+        out.push_str(&format!(
+            "  0xF7 status: {}\n",
+            probe(&t, crate::protocol::receiver::status_packet())
+        ));
+        match t.identify() {
+            Ok(id) => out.push_str(&format!(
+                "  identify: {id} (0x{id:08x}) link {:?} registry {}\n",
+                t.link(),
+                registry::by_id(id)
+                    .or_else(|| registry::by_id(id & 0x7FFF_FFFF))
+                    .is_some()
+            )),
+            Err(e) => out.push_str(&format!("  identify: {e}\n")),
+        }
+    }
+    out.push_str(&format!("trace: {}\n", hid::wire_trace()));
+    Ok(out)
 }

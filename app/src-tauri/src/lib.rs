@@ -120,6 +120,7 @@ pub fn run() {
             a75::a75_music_stop,
             a75::a75_music_params,
             a75::a75_music_status,
+            commands::a75_scan_debug,
             a75::a75_prefs_get,
             a75::a75_prefs_set,
             a75::a75_recent_apps,

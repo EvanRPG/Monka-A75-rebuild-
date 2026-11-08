@@ -212,6 +212,9 @@ export const mockBackend: Backend = {
   },
   async setAutostart() {},
   async notify() {},
+  async scanDebug() {
+    return "demo: no hardware";
+  },
   async musicStatus() {
     const m = state.music;
     if (m.running && m.params && m.params.source !== "music") {

@@ -175,7 +175,7 @@ function Shell() {
           <PageView page={def.id} go={go} />
         ) : (
           <div className="grid flex-1 place-items-center p-8 text-center">
-            <div className="max-w-sm">
+            <div className="max-w-lg">
               <div className="text-[15px] font-semibold">
                 {scanning
                   ? t("正在寻找键盘…")
@@ -196,6 +196,7 @@ function Shell() {
                       ? t("先完全退出原版魔咖驱动（包括右下角托盘图标），两个软件不能同时打开。")
                       : t("用数据线把 A75 接到电脑上，或插好 2.4G 接收器并按任意键唤醒键盘。先关掉原版魔咖驱动，两个软件不能同时打开。")}
               </p>
+              {!scanning && <ScanDebug />}
             </div>
           </div>
         )}
@@ -243,6 +244,37 @@ const LIVE_NAMES: Record<string, [string, PageId]> = {
   volume: [t("音量仪表"), "meters"],
   timer: [t("倒计时"), "meters"],
 };
+
+/** Read-only report of what the computer sees, to copy for the developer. */
+function ScanDebug() {
+  const [text, setText] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await api.scanDebug();
+      setText(r);
+      await navigator.clipboard.writeText(r).catch(() => {});
+    } catch (e) {
+      setText(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-5 flex flex-col items-center gap-2">
+      <button type="button" disabled={busy} onClick={run} className="text-xs text-primary hover:underline disabled:opacity-50">
+        {busy ? t("正在检查…") : t("还是不行？生成诊断信息（只读取，不写入键盘）")}
+      </button>
+      {text && (
+        <>
+          <p className="text-xs text-muted-foreground">{t("已复制，粘贴发给开发者即可。")}</p>
+          <pre className="max-h-64 w-full overflow-auto rounded-md border border-border bg-muted/40 p-2 text-left font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-text">{text}</pre>
+        </>
+      )}
+    </div>
+  );
+}
 
 /** Shown while the computer drives the board, on every page. */
 function LivePill({ go }: { go: (p: PageId) => void }) {

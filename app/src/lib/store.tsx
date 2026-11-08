@@ -91,7 +91,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setDevice(d);
         setScanNote(note);
         // A (re)connect: read the lighting the board is actually showing.
-        if (d && (!was || was.path !== d.path)) setLedState(await api.getLedParam());
+        // Over 2.4G a read can miss while the radio wakes; that must not
+        // hide a keyboard the scan just found, so it retries on its own.
+        if (d && (!was || was.path !== d.path)) {
+          for (let i = 0; i < 6; i++) {
+            try {
+              setLedState(await api.getLedParam());
+              break;
+            } catch {
+              await new Promise((r) => setTimeout(r, 1500));
+              if (deviceRef.current?.path !== d.path) break;
+            }
+          }
+        }
       })
       .catch(() => {
         deviceRef.current = null;
