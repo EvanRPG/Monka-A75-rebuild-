@@ -142,6 +142,8 @@ html,
 body {
   background: var(--background);
   color: var(--foreground);
+  /* The app fills the window; panes scroll inside it, the page never does. */
+  overflow: hidden;
 }
 
 .tabular {

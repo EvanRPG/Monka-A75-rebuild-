@@ -28,8 +28,14 @@ const HIGH_HZ: f32 = 16_000.0;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicParams {
+    /// LEDPARAM mode: 22 (music 2) or 20 (music 3). Both take the same frames.
+    #[serde(default = "default_mode")]
+    pub mode: u8,
     /// Firmware layout: 0 upright, 1 separate, 2 intersect (LEDPARAM option).
     pub style: u8,
+    /// 0: this app's analyser. 1: the vendor's (see `vendor_levels`).
+    #[serde(default)]
+    pub algo: u8,
     pub gain: f32,
     pub gate: f32,
     pub decay: f32,
@@ -37,9 +43,13 @@ pub struct MusicParams {
     pub spread: f32,
 }
 
+fn default_mode() -> u8 {
+    22
+}
+
 impl Default for MusicParams {
     fn default() -> Self {
-        Self { style: 0, gain: 55.0, gate: 12.0, decay: 45.0, bass: 30.0, spread: 25.0 }
+        Self { mode: 22, style: 0, algo: 0, gain: 55.0, gate: 12.0, decay: 45.0, bass: 30.0, spread: 25.0 }
     }
 }
 
@@ -59,6 +69,9 @@ pub struct Analyzer {
     /// FFT bin range per band.
     bands: Vec<(usize, usize)>,
     held: [f32; BANDS],
+    /// Vendor path: Blackman window and the analyser's smoothed magnitudes.
+    blackman: Vec<f32>,
+    smooth: Vec<f32>,
 }
 
 impl Analyzer {
@@ -81,12 +94,22 @@ impl Analyzer {
             bands.push((start, end));
             prev_end = end;
         }
-        Self { fft, window, bands, held: [0.0; BANDS] }
+        let blackman = (0..FFT_N)
+            .map(|i| {
+                let x = 2.0 * std::f32::consts::PI * i as f32 / FFT_N as f32;
+                0.42 - 0.5 * x.cos() + 0.08 * (2.0 * x).cos()
+            })
+            .collect();
+        Self { fft, window, bands, held: [0.0; BANDS], blackman, smooth: vec![0.0; FFT_N / 2] }
     }
 
     /// Levels for the newest `FFT_N` samples (mono, -1..1). Fewer samples
     /// are zero-padded at the front.
     pub fn levels(&mut self, samples: &[f32], p: &MusicParams) -> [u8; BANDS] {
+        if p.algo == 1 {
+            let raw = self.vendor_levels(samples);
+            return self.finish(raw.map(|v| v as f32), p);
+        }
         let mut buf: Vec<Complex<f32>> = vec![Complex::new(0.0, 0.0); FFT_N];
         let take = samples.len().min(FFT_N);
         let off = FFT_N - take;
@@ -101,7 +124,6 @@ impl Analyzer {
         let top_db = -8.0 - p.gain.clamp(0.0, 100.0) * 0.32;
         let floor_db = top_db - 42.0;
         let gate = p.gate.clamp(0.0, 100.0) / 100.0 * 0.6;
-        let fall = 0.12 + (1.0 - p.decay.clamp(0.0, 100.0) / 100.0) * 1.3;
 
         let mut raw = [0f32; BANDS];
         for (i, &(a, b)) in self.bands.iter().enumerate() {
@@ -114,16 +136,55 @@ impl Analyzer {
             let norm = ((db - floor_db) / (top_db - floor_db)).clamp(0.0, 1.0);
             raw[i] = if norm < gate { 0.0 } else { norm * LEVEL_MAX as f32 };
         }
-        for i in 0..BANDS {
-            self.held[i] = raw[i].max(self.held[i] - fall);
+        self.finish(raw, p)
+    }
+
+    /// Fall-off and glow, shared by both analysers.
+    fn finish(&mut self, raw: [f32; BANDS], p: &MusicParams) -> [u8; BANDS] {
+        let fall = 0.12 + (1.0 - p.decay.clamp(0.0, 100.0) / 100.0) * 1.3;
+        for (h, &r) in self.held.iter_mut().zip(raw.iter()) {
+            *h = r.max(*h - fall);
         }
         let k = p.spread.clamp(0.0, 100.0) / 100.0 * 0.6;
         let mut out = [0u8; BANDS];
-        for i in 0..BANDS {
+        for (i, o) in out.iter_mut().enumerate() {
             let l = self.held[i.saturating_sub(1)];
             let r = self.held[(i + 1).min(BANDS - 1)];
             let v = self.held[i] * (1.0 - k) + (l + r) * 0.5 * k;
-            out[i] = v.round().clamp(0.0, LEVEL_MAX as f32) as u8;
+            *o = v.round().clamp(0.0, LEVEL_MAX as f32) as u8;
+        }
+        out
+    }
+
+    /// The vendor app's `music3Delt`, which feeds both of its music modes:
+    /// a Web Audio analyser (fftSize 2048, smoothing 0.4, byte data over
+    /// -100..-30 dB); the first 100 bins less the minimum of bins 20..40;
+    /// scaled so the frame's loudest bin is 6; bins 27..59 sent.
+    pub fn vendor_levels(&mut self, samples: &[f32]) -> [u8; BANDS] {
+        let mut buf: Vec<Complex<f32>> = vec![Complex::new(0.0, 0.0); FFT_N];
+        let take = samples.len().min(FFT_N);
+        let off = FFT_N - take;
+        for (i, &s) in samples[samples.len() - take..].iter().enumerate() {
+            buf[off + i] = Complex::new(s * self.blackman[off + i], 0.0);
+        }
+        self.fft.process(&mut buf);
+        let mut bytes = [0f32; 100];
+        for (k, b) in bytes.iter_mut().enumerate() {
+            let mag = buf[k].norm() / FFT_N as f32;
+            self.smooth[k] = 0.4 * self.smooth[k] + 0.6 * mag;
+            let db = 20.0 * (self.smooth[k] + 1e-12).log10();
+            *b = (255.0 * (db + 100.0) / 70.0).clamp(0.0, 255.0).floor();
+        }
+        let floor = bytes[20..40].iter().copied().fold(f32::MAX, f32::min);
+        let rel: Vec<f32> = bytes.iter().map(|v| v - floor).collect();
+        let max = rel.iter().copied().fold(f32::MIN, f32::max);
+        let mut out = [0u8; BANDS];
+        if max <= 0.0 {
+            return out;
+        }
+        let unit = max / LEVEL_MAX as f32;
+        for (o, &v) in out.iter_mut().zip(rel[27..59].iter()) {
+            *o = (v / unit).round().clamp(0.0, LEVEL_MAX as f32) as u8;
         }
         out
     }
@@ -240,6 +301,18 @@ mod tests {
         let lv = a.levels(&tone, &p);
         assert!(lv[..8].iter().any(|&l| l >= 4), "{lv:?}");
         assert!(lv[20..].iter().all(|&l| l <= 1), "{lv:?}");
+    }
+
+    #[test]
+    fn vendor_path_tops_out_at_six_and_is_dark_in_silence() {
+        let mut a = Analyzer::new(48_000);
+        let p = MusicParams { algo: 1, spread: 0.0, decay: 0.0, ..Default::default() };
+        assert!(a.levels(&vec![0.0; FFT_N], &p).iter().all(|&l| l == 0));
+        // 1 kHz sits in bins 27..59 at 48 kHz (bin 42 or so).
+        let tone: Vec<f32> = (0..FFT_N).map(|i| 0.3 * (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / 48_000.0).sin()).collect();
+        let mut a = Analyzer::new(48_000);
+        let lv = a.levels(&tone, &p);
+        assert_eq!(lv.iter().copied().max(), Some(6), "{lv:?}");
     }
 
     #[test]

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Play, Square, Volume2 } from "lucide-react";
 import type { Rgb } from "@/lib/effects";
 
-const DEFAULTS: MusicParams = { style: 0, gain: 55, gate: 12, decay: 45, bass: 30, spread: 25 };
+const DEFAULTS: MusicParams = { mode: 22, style: 0, algo: 0, gain: 55, gate: 12, decay: 45, bass: 30, spread: 25 };
 
 const X0 = Math.min(...LIT_KEYS.map((k) => k.x));
 const X1 = Math.max(...LIT_KEYS.map((k) => k.x + k.w));
@@ -152,6 +152,38 @@ export default function Music() {
             </div>
             {status.error && <p className="text-xs text-destructive">律动已停止：{status.error}</p>}
           </div>
+          <Section title="律动模式">
+            <Segmented
+              id="music-mode"
+              className="w-full"
+              value={params.mode}
+              options={[
+                [22, "律动 2"],
+                [20, "律动 3"],
+              ]}
+              onChange={(v) => change({ ...params, mode: v })}
+            />
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              原版驱动的两种音乐模式，用的是同一份频谱数据，由键盘用各自的方式画出来。律动 3 还没在你的键盘上测过。
+            </p>
+          </Section>
+          <Section title="频谱算法">
+            <Segmented
+              id="music-algo"
+              className="w-full"
+              value={params.algo}
+              options={[
+                [0, "本软件"],
+                [1, "原版"],
+              ]}
+              onChange={(v) => change({ ...params, algo: v })}
+            />
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {params.algo === 0
+                ? "从低音到高音覆盖全频段，下面的参数都能调。"
+                : "照搬原版：只看中频（约 630 到 1400 Hz），每帧把最响的一段拉满。灵敏度、门限和低音加权对它不起作用。"}
+            </p>
+          </Section>
           <Section title="样式">
             <Segmented
               id="music-style"
@@ -166,10 +198,10 @@ export default function Music() {
             />
           </Section>
           <Section title="调节" aside={<button type="button" className="text-xs text-primary hover:underline" onClick={() => change(DEFAULTS)}>恢复默认</button>}>
-            <SliderRow id="music-gain" label="灵敏度" value={params.gain} min={0} max={100} onChange={(v) => change({ ...params, gain: v })} format={(v) => `${v}%`} hint="声音小也想跳得满，就调高。" />
-            <SliderRow id="music-gate" label="噪声门限" value={params.gate} min={0} max={100} onChange={(v) => change({ ...params, gate: v })} format={(v) => `${v}%`} hint="低于门限的声音不亮灯，安静时键盘保持全暗。" />
+            <SliderRow disabled={params.algo === 1} id="music-gain" label="灵敏度" value={params.gain} min={0} max={100} onChange={(v) => change({ ...params, gain: v })} format={(v) => `${v}%`} hint="声音小也想跳得满，就调高。" />
+            <SliderRow disabled={params.algo === 1} id="music-gate" label="噪声门限" value={params.gate} min={0} max={100} onChange={(v) => change({ ...params, gate: v })} format={(v) => `${v}%`} hint="低于门限的声音不亮灯，安静时键盘保持全暗。" />
             <SliderRow id="music-decay" label="下落拖尾" value={params.decay} min={0} max={100} onChange={(v) => change({ ...params, decay: v })} format={(v) => `${v}%`} hint="越大，灯柱落下得越慢。" />
-            <SliderRow id="music-bass" label="低音加权" value={params.bass} min={0} max={100} onChange={(v) => change({ ...params, bass: v })} format={(v) => `${v}%`} hint="突出鼓点和贝斯。" />
+            <SliderRow disabled={params.algo === 1} id="music-bass" label="低音加权" value={params.bass} min={0} max={100} onChange={(v) => change({ ...params, bass: v })} format={(v) => `${v}%`} hint="突出鼓点和贝斯。" />
             <SliderRow id="music-spread" label="光晕扩散" value={params.spread} min={0} max={100} onChange={(v) => change({ ...params, spread: v })} format={(v) => `${v}%`} hint="让相邻频段互相带亮，画面更柔和。" />
           </Section>
           <Section title="注意">

@@ -42,14 +42,25 @@ const SLEEP_OPTIONS: [number, string][] = [
   [0, "从不"],
 ];
 
+function sleepLabel(v: number) {
+  if (v === 0) return "从不";
+  if (v % 3600 === 0) return `${v / 3600} 小时`;
+  if (v % 60 === 0) return `${v / 60} 分钟`;
+  return `${v} 秒`;
+}
+
 function SleepSelect({ id, value, onChange }: { id: string; value: number; onChange: (v: number) => void }) {
+  // Whatever the keyboard holds is shown, even if it is not one of ours.
+  const options = SLEEP_OPTIONS.some(([v]) => v === value)
+    ? SLEEP_OPTIONS
+    : [...SLEEP_OPTIONS, [value, sleepLabel(value)] as [number, string]].sort((a, b) => (a[0] || 1e9) - (b[0] || 1e9));
   return (
     <Select value={String(value)} onValueChange={(v) => onChange(Number(v))}>
       <SelectTrigger id={id} size="sm" className="w-28">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {SLEEP_OPTIONS.map(([v, l]) => (
+        {options.map(([v, l]) => (
           <SelectItem key={v} value={String(v)}>
             {l}
           </SelectItem>

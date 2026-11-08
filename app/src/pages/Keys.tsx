@@ -53,8 +53,9 @@ export default function Keys() {
     if (!sel || !maps) return;
     const fnLayer = layer === "fn";
     try {
-      const ok = await api.setKey(0, sel.slot, f.entry, fnLayer);
-      if (!ok) throw new Error("键盘回读不一致");
+      // Resolves on success (the flag only says which write path was used);
+      // failures arrive as errors.
+      await api.setKey(0, sel.slot, f.entry, fnLayer);
       setMaps((m) => {
         if (!m) return m;
         const next = [...m[layer]];

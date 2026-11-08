@@ -72,8 +72,12 @@ export interface Macro {
 
 /** A75 addition: host-side music analysis that streams SET_AUDIO frames. */
 export interface MusicParams {
+  /** LEDPARAM mode: 22 律动 2, 20 律动 3. */
+  mode: number;
   /** 0 竖立 / 1 分离 / 2 交叉: the firmware's three music layouts. */
   style: number;
+  /** 0 this app's analyser (tunable), 1 the vendor's (auto gain). */
+  algo: number;
   gain: number;
   gate: number;
   decay: number;
@@ -99,6 +103,7 @@ export interface Backend {
   setLedParam(p: LedParam): Promise<void>;
   readKeymap(profile: number): Promise<number[]>;
   readFnKeymap(layer: number): Promise<number[]>;
+  /** Resolves when written. The boolean is true when the whole layer was uploaded. */
   setKey(profile: number, slot: number, value: number[], fnLayer: boolean): Promise<boolean>;
   writePerKey(colors: number[], activate: boolean): Promise<void>;
   readMacro(slot: number): Promise<Macro>;

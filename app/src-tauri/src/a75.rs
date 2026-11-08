@@ -25,6 +25,8 @@ const SET_REPORT: u8 = 0x04;
 const GET_REPORT: u8 = 0x84;
 /// LEDPARAM mode the vendor app switches to before streaming (captured).
 const MODE_MUSIC: u8 = 22;
+/// The vendor's other music mode; same frames, its own renderer.
+const MODE_MUSIC_3: u8 = 20;
 
 fn require_a75(state: &tauri::State<AppState>, cable: bool) -> Result<(), String> {
     match open_board(state) {
@@ -107,7 +109,8 @@ struct Run {
     thread: Option<JoinHandle<()>>,
     /// Lighting before music, restored on stop.
     before: LedParam,
-    style_sent: u8,
+    /// (mode, style) last written, so a change rewrites LEDPARAM once.
+    style_sent: (u8, u8),
 }
 
 #[derive(Default)]
@@ -116,11 +119,11 @@ pub struct MusicState {
     status: Arc<Mutex<MusicStatus>>,
 }
 
-fn music_led(style: u8, before: &LedParam) -> LedParam {
+fn music_led(mode: u8, style: u8, before: &LedParam) -> LedParam {
     // The captured switch: mode 22, flags byte 0 (option 0, no colour
     // flag), wire speed 4 (host 1 on yc500's 5-based scale), brightness kept.
     LedParam {
-        mode: MODE_MUSIC,
+        mode: if mode == MODE_MUSIC_3 { MODE_MUSIC_3 } else { MODE_MUSIC },
         speed: 1,
         brightness: before.brightness.max(1),
         option: style.min(2),
@@ -162,7 +165,7 @@ pub fn a75_music_start(
     let before = with_open(&state, |t, _| block_on(ops::read_led_param(t, wire)))?;
     // Already in music mode (an earlier run that never restored)? Fall back
     // to a plain static white so stop leaves the board lit.
-    let before = if before.mode == MODE_MUSIC || before.mode == 20 {
+    let before = if before.mode == MODE_MUSIC || before.mode == MODE_MUSIC_3 {
         LedParam { mode: 1, speed: 0, brightness: 4, option: 0, dazzle: false, r: 255, g: 255, b: 255 }
     } else {
         before
@@ -205,7 +208,7 @@ pub fn a75_music_start(
             return Err("打开音频设备超时".into());
         }
     };
-    if let Err(e) = send_led(&state, music_led(params.style, &before)) {
+    if let Err(e) = send_led(&state, music_led(params.mode, params.style, &before)) {
         stop.store(true, Ordering::Relaxed);
         return Err(e);
     }
@@ -213,7 +216,7 @@ pub fn a75_music_start(
         let mut st = music_state.status.lock();
         *st = MusicStatus { running: true, source: Some(source), levels: vec![0; BANDS], error: None };
     }
-    *music_state.run.lock() = Some(Run { stop, params: shared, thread: Some(thread), before, style_sent: params.style });
+    *music_state.run.lock() = Some(Run { stop, params: shared, thread: Some(thread), before, style_sent: (params.mode, params.style) });
     Ok(())
 }
 
@@ -288,9 +291,9 @@ pub fn a75_music_params(
         let mut guard = music_state.run.lock();
         let Some(run) = guard.as_mut() else { return Ok(()) };
         *run.params.lock() = params;
-        if run.style_sent != params.style {
-            run.style_sent = params.style;
-            Some(music_led(params.style, &run.before))
+        if run.style_sent != (params.mode, params.style) {
+            run.style_sent = (params.mode, params.style);
+            Some(music_led(params.mode, params.style, &run.before))
         } else {
             None
         }
